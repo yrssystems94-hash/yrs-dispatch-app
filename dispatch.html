@@ -34,7 +34,7 @@
     }
 
     .app {
-      max-width: 720px;
+      max-width: 760px;
       margin: 0 auto;
       padding: 16px;
     }
@@ -61,7 +61,7 @@
 
     h1 {
       margin: 0;
-      font-size: 24px;
+      font-size: 26px;
       line-height: 1.2;
     }
 
@@ -158,7 +158,7 @@
       color: white;
     }
 
-    .start-wrap {
+    .route-build-panel {
       background: var(--card);
       border-radius: 20px;
       box-shadow: var(--shadow);
@@ -167,39 +167,45 @@
       margin-bottom: 16px;
     }
 
-    .start-title {
-      font-size: 15px;
-      font-weight: 800;
-      margin-bottom: 10px;
-    }
-
-    .start-grid {
+    .route-build-grid {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 12px;
     }
 
-    .start-select,
-    .start-input {
+    .field-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field-input,
+    .field-select {
       width: 100%;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 14px 12px;
-      font-size: 14px;
-      min-height: 48px;
-      background: white;
+      background: #fff;
       color: var(--text);
-    }
-
-    .start-help {
-      margin-top: 8px;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.4;
+      font-size: 14px;
+      font-weight: 700;
     }
 
     .optimize-wrap {
-      margin-bottom: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 8px;
     }
 
     .optimize-btn {
@@ -221,19 +227,8 @@
       cursor: not-allowed;
     }
 
-    .resume-btn {
-      width: 100%;
-      border: none;
-      border-radius: 14px;
-      background: var(--today);
-      color: white;
-      padding: 14px 12px;
-      font-size: 14px;
-      font-weight: 800;
-      box-shadow: var(--shadow);
-      cursor: pointer;
-      min-height: 48px;
-      margin-top: 10px;
+    .optimize-btn.emergency {
+      background: var(--urgent);
     }
 
     .selection-note {
@@ -242,6 +237,24 @@
       color: var(--muted);
       text-align: center;
       min-height: 18px;
+    }
+
+    .resume-wrap {
+      margin-top: 10px;
+    }
+
+    .resume-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: var(--success);
+      color: white;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 48px;
     }
 
     .panel {
@@ -383,7 +396,7 @@
 
     .lead-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 10px;
     }
 
@@ -404,6 +417,11 @@
 
     .map-btn {
       background: var(--today);
+      color: white;
+    }
+
+    .delete-btn {
+      background: var(--urgent);
       color: white;
     }
 
@@ -473,9 +491,21 @@
       line-height: 1.45;
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 640px) {
       .title-row {
         align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .refresh-btn,
+      .optimize-wrap,
+      .route-build-grid,
+      .lead-meta,
+      .lead-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
         flex-direction: column;
       }
 
@@ -485,10 +515,6 @@
 
       .filters-grid {
         grid-template-columns: 1fr 1fr;
-      }
-
-      .lead-meta {
-        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -535,37 +561,52 @@
       <button id="clearFilterBtn" class="control-btn" type="button">Clear Filter</button>
     </div>
 
-    <div class="start-wrap">
-      <div class="start-title">Starting Location</div>
-      <div class="start-grid">
-        <select id="startModeSelect" class="start-select">
-          <option value="home">Home - 10 Carlyle Pl, Kitchener, ON N2P 1R6</option>
-          <option value="custom">Custom Start</option>
-        </select>
-        <input
-          id="customStartInput"
-          class="start-input"
-          type="text"
-          placeholder="Enter a custom starting address"
-          hidden
-        />
+    <div class="route-build-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Build Route</div>
+          <div class="panel-subtitle">Choose a starting point, select jobs, then build either a standard or emergency route.</div>
+        </div>
       </div>
-      <div class="start-help">
-        Default start is your home base. You can switch to a custom start point before optimizing.
-      </div>
-    </div>
 
-    <div class="optimize-wrap">
-      <button id="optimizeBtn" class="optimize-btn" type="button">Optimize Today</button>
-      <button id="resumeRouteBtn" class="resume-btn" type="button" hidden>Resume Active Route</button>
+      <div class="route-build-grid">
+        <div class="field-wrap">
+          <label for="startModeSelect" class="field-label">Start Location</label>
+          <select id="startModeSelect" class="field-select">
+            <option value="home">Home Base</option>
+            <option value="custom">Custom Start</option>
+          </select>
+        </div>
+
+        <div class="field-wrap">
+          <label for="customStartInput" class="field-label">Custom Start Address</label>
+          <input
+            id="customStartInput"
+            class="field-input"
+            type="text"
+            placeholder="Enter a custom starting address"
+            hidden
+          />
+        </div>
+      </div>
+
+      <div class="optimize-wrap">
+        <button id="optimizeBtn" class="optimize-btn" type="button">Optimize Today</button>
+        <button id="emergencyOptimizeBtn" class="optimize-btn emergency" type="button">Emergency Optimize</button>
+      </div>
+
       <div id="selectionNote" class="selection-note">Select jobs first, then optimize your day.</div>
+
+      <div class="resume-wrap">
+        <button id="resumeRouteBtn" class="resume-btn" type="button" hidden>Resume Current Route</button>
+      </div>
     </div>
 
     <div class="panel">
       <div class="panel-header">
         <div>
           <div class="panel-title">Optimized Route Preview</div>
-          <div class="panel-subtitle">Hybrid logic: urgency → overdue → preferred time</div>
+          <div class="panel-subtitle">Hybrid logic: urgency → overdue → preferred time → grouped stops</div>
         </div>
       </div>
 
@@ -578,7 +619,7 @@
       <div class="panel-header">
         <div>
           <div id="panelTitle" class="panel-title">All Leads</div>
-          <div id="panelSubtitle" class="panel-subtitle">Showing dispatch-ready leads only</div>
+          <div id="panelSubtitle" class="panel-subtitle">Showing all dispatch-ready leads</div>
         </div>
       </div>
 
