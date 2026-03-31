@@ -153,6 +153,40 @@ const ROUTE_CONFIG = {
     return getLat(lead) !== null && getLng(lead) !== null;
   }
 
+  function getRouteStartPoint(route) {
+    const startLat = Number(route?.startLat);
+    const startLng = Number(route?.startLng);
+
+    if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
+      return {
+        lat: startLat,
+        lng: startLng,
+        address: normalizeString(route?.startAddress),
+        source: normalizeString(route?.startSource) || "saved",
+      };
+    }
+
+    const firstStop = Array.isArray(route?.stops)
+      ? route.stops.find(hasCoordinates)
+      : null;
+
+    if (firstStop) {
+      return {
+        lat: getLat(firstStop),
+        lng: getLng(firstStop),
+        address: normalizeString(route?.startAddress) || getLeadAddress(firstStop),
+        source: "first_stop_fallback",
+      };
+    }
+
+    return {
+      lat: null,
+      lng: null,
+      address: normalizeString(route?.startAddress),
+      source: "none",
+    };
+  }
+
   function isUrgentStop(lead) {
     const routeStatus = normalizeString(lead?.route_status).toLowerCase();
     const priority = normalizeString(lead?.priority).toLowerCase();
@@ -314,7 +348,7 @@ const ROUTE_CONFIG = {
 
     tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: "&copy; OpenStreetMap contributors",
     });
 
     tileLayer.addTo(map);
@@ -449,7 +483,7 @@ const ROUTE_CONFIG = {
 
   function renderMap(route) {
     const stops = Array.isArray(route?.stops) ? route.stops : [];
-    const startAddress = normalizeString(route?.startAddress);
+    const startPoint = getRouteStartPoint(route);
     const m = initMapIfNeeded();
 
     if (!m) return;
@@ -467,6 +501,7 @@ const ROUTE_CONFIG = {
 
     const stopsWithCoords = stops.filter(hasCoordinates);
     const boundsPoints = [];
+    const linePoints = [];
 
     if (!stopsWithCoords.length) {
       destroyMap();
@@ -487,21 +522,19 @@ const ROUTE_CONFIG = {
       return;
     }
 
-    const firstStop = stopsWithCoords[0];
-    const startLat = getLat(firstStop);
-    const startLng = getLng(firstStop);
+    if (startPoint.lat !== null && startPoint.lng !== null) {
+      const startMarker = L.marker([startPoint.lat, startPoint.lng], {
+        icon: createStartIcon(),
+        zIndexOffset: 1000,
+      }).bindPopup(
+        `<strong>Start</strong><br>${escapeHtml(
+          startPoint.address || "Selected starting point"
+        )}`
+      );
 
-    const startMarker = L.marker([startLat, startLng], {
-      icon: createStartIcon(),
-      zIndexOffset: 1000,
-    }).bindPopup(
-      `<strong>Start</strong><br>${escapeHtml(startAddress || getLeadAddress(firstStop))}`
-    );
-
-    markerLayer.addLayer(startMarker);
-    boundsPoints.push([startLat, startLng]);
-
-    const linePoints = [];
+      markerLayer.addLayer(startMarker);
+      boundsPoints.push([startPoint.lat, startPoint.lng]);
+    }
 
     stops.forEach((lead, index) => {
       if (!hasCoordinates(lead)) return;
@@ -531,8 +564,13 @@ const ROUTE_CONFIG = {
       activeMarkersByLeadId.set(leadId, marker);
     });
 
-    if (linePoints.length >= 2) {
-      routePolyline = L.polyline(linePoints, {
+    const polylinePoints =
+      startPoint.lat !== null && startPoint.lng !== null
+        ? [[startPoint.lat, startPoint.lng], ...linePoints]
+        : linePoints;
+
+    if (polylinePoints.length >= 2) {
+      routePolyline = L.polyline(polylinePoints, {
         color: "#2f7cf6",
         weight: 5,
         opacity: 0.78,
@@ -547,9 +585,18 @@ const ROUTE_CONFIG = {
     }
 
     if (els.mapNote) {
+      const startSourceText =
+        startPoint.source === "home"
+          ? "Starting at home base."
+          : startPoint.source === "custom_geocoded"
+          ? "Starting at your chosen custom location."
+          : startPoint.source === "first_stop_fallback"
+          ? "Custom start could not be mapped, so the view is anchored to the first stop area."
+          : "Live route map loaded.";
+
       els.mapNote.textContent = `${stopsWithCoords.length} mapped stop${
         stopsWithCoords.length === 1 ? "" : "s"
-      } rendered in your local route area.`;
+      } rendered. ${startSourceText}`;
     }
   }
 
