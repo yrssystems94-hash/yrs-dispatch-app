@@ -4,6 +4,8 @@ const DISPATCH_CONFIG = {
     window.location.hostname === "localhost"
       ? "http://localhost:4000"
       : "https://yrs-lead-api.onrender.com",
+  defaultStartAddress: "10 Carlyle Pl, Kitchener, ON N2P 1R6",
+  activeRouteStorageKey: "yrs_active_route",
 };
 
 (function () {
@@ -12,6 +14,9 @@ const DISPATCH_CONFIG = {
     showAllBtn: document.getElementById("showAllBtn"),
     clearFilterBtn: document.getElementById("clearFilterBtn"),
     optimizeBtn: document.getElementById("optimizeBtn"),
+    resumeRouteBtn: document.getElementById("resumeRouteBtn"),
+    startModeSelect: document.getElementById("startModeSelect"),
+    customStartInput: document.getElementById("customStartInput"),
     statusBar: document.getElementById("statusBar"),
     panelTitle: document.getElementById("panelTitle"),
     panelSubtitle: document.getElementById("panelSubtitle"),
@@ -81,6 +86,52 @@ const DISPATCH_CONFIG = {
     return normalizeString(lead.phone);
   }
 
+  function getActiveRoute() {
+    try {
+      const raw = window.localStorage.getItem(DISPATCH_CONFIG.activeRouteStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function setActiveRoute(routeData) {
+    window.localStorage.setItem(
+      DISPATCH_CONFIG.activeRouteStorageKey,
+      JSON.stringify(routeData)
+    );
+  }
+
+  function clearActiveRoute() {
+    window.localStorage.removeItem(DISPATCH_CONFIG.activeRouteStorageKey);
+  }
+
+  function updateResumeRouteButton() {
+    if (!els.resumeRouteBtn) return;
+    const activeRoute = getActiveRoute();
+    els.resumeRouteBtn.hidden = !activeRoute;
+  }
+
+  function getStartAddress() {
+    const mode = normalizeString(els.startModeSelect?.value) || "home";
+
+    if (mode === "custom") {
+      const custom = normalizeString(els.customStartInput?.value);
+      return custom || DISPATCH_CONFIG.defaultStartAddress;
+    }
+
+    return DISPATCH_CONFIG.defaultStartAddress;
+  }
+
+  function updateStartInputUi() {
+    if (!els.startModeSelect || !els.customStartInput) return;
+
+    const isCustom = normalizeString(els.startModeSelect.value) === "custom";
+    els.customStartInput.hidden = !isCustom;
+  }
+
   function getLeadBadgeClass(lead) {
     const priority = normalizeString(lead.priority).toLowerCase();
     const serviceType = normalizeString(lead.service_type).toLowerCase();
@@ -137,7 +188,7 @@ const DISPATCH_CONFIG = {
 
     if (els.optimizeBtn) {
       els.optimizeBtn.disabled = state.isLoadingLeads;
-      els.optimizeBtn.textContent = "Optimize Today";
+      els.optimizeBtn.textContent = state.isLoadingLeads ? "Loading..." : "Optimize Today";
     }
   }
 
@@ -182,7 +233,7 @@ const DISPATCH_CONFIG = {
       case "unrouted":
         return "Dispatch-ready leads not yet routed";
       default:
-        return "Showing all dispatch-ready leads";
+        return "Showing dispatch-ready leads only";
     }
   }
 
@@ -455,29 +506,48 @@ const DISPATCH_CONFIG = {
       return;
     }
 
-    els.routeOutput.innerHTML = routeLeads
-      .map((lead, index) => {
-        const address = getLeadAddress(lead);
-        const serviceType = formatDisplay(lead.service_type);
-        const priority = formatDisplay(lead.priority);
-        const preferredTime = formatDisplay(lead.preferred_time);
-        const score = getHybridScore(lead);
+    const startAddress = getStartAddress();
 
-        return `
-          <div class="route-step">
-            <div class="route-step-top">
-              <div class="route-number">Stop ${index + 1}</div>
-              <div class="lead-badge ${escapeHtml(getLeadBadgeClass(lead))}">${escapeHtml(getLeadBadgeText(lead))}</div>
-            </div>
+    els.routeOutput.innerHTML = `
+      <div class="route-step">
+        <div class="route-step-top">
+          <div class="route-number">Start</div>
+          <div class="lead-badge">Home Base</div>
+        </div>
+        <div class="route-step-address">${escapeHtml(startAddress)}</div>
+        <div class="route-step-meta">Starting point for this route</div>
+      </div>
+      ${routeLeads
+        .map((lead, index) => {
+          const address = getLeadAddress(lead);
+          const serviceType = formatDisplay(lead.service_type);
+          const priority = formatDisplay(lead.priority);
+          const preferredTime = formatDisplay(lead.preferred_time);
+          const score = getHybridScore(lead);
 
-            <div class="route-step-address">${escapeHtml(address)}</div>
-            <div class="route-step-meta">
-              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${score}
+          return `
+            <div class="route-step">
+              <div class="route-step-top">
+                <div class="route-number">Stop ${index + 1}</div>
+                <div class="lead-badge ${escapeHtml(getLeadBadgeClass(lead))}">${escapeHtml(getLeadBadgeText(lead))}</div>
+              </div>
+
+              <div class="route-step-address">${escapeHtml(address)}</div>
+              <div class="route-step-meta">
+                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${score}
+              </div>
             </div>
-          </div>
-        `;
-      })
-      .join("");
+          `;
+        })
+        .join("")}
+    `;
+  }
+
+  function filterOutRoutedLeads(leads) {
+    return (Array.isArray(leads) ? leads : []).filter((lead) => {
+      const routeStatus = normalizeString(lead.route_status).toLowerCase();
+      return routeStatus !== "routed";
+    });
   }
 
   async function loadCounts() {
@@ -493,10 +563,15 @@ const DISPATCH_CONFIG = {
         fetchJson("/api/leads-db?route_status=unrouted"),
       ]);
 
-      if (els.urgentCount) els.urgentCount.textContent = String(urgent.count || 0);
-      if (els.todayCount) els.todayCount.textContent = String(today.count || 0);
-      if (els.overdueCount) els.overdueCount.textContent = String(overdue.count || 0);
-      if (els.unroutedCount) els.unroutedCount.textContent = String(unrouted.count || 0);
+      const urgentLeads = filterOutRoutedLeads(urgent.leads);
+      const todayLeads = filterOutRoutedLeads(today.leads);
+      const overdueLeads = filterOutRoutedLeads(overdue.leads);
+      const unroutedLeads = filterOutRoutedLeads(unrouted.leads);
+
+      if (els.urgentCount) els.urgentCount.textContent = String(urgentLeads.length);
+      if (els.todayCount) els.todayCount.textContent = String(todayLeads.length);
+      if (els.overdueCount) els.overdueCount.textContent = String(overdueLeads.length);
+      if (els.unroutedCount) els.unroutedCount.textContent = String(unroutedLeads.length);
     } catch (error) {
       console.error("Failed to load dashboard counts:", error);
       setError("Could not load dashboard counts. Please refresh.");
@@ -518,10 +593,10 @@ const DISPATCH_CONFIG = {
       const path = query ? `/api/leads-db?${query}` : "/api/leads-db";
       const result = await fetchJson(path);
 
-      state.allLeads = Array.isArray(result.leads) ? result.leads : [];
+      state.allLeads = filterOutRoutedLeads(result.leads);
       renderLeads(state.allLeads);
 
-      const count = result.count || 0;
+      const count = state.allLeads.length;
       setStatus(`${getFilterTitle(filterKey)} loaded: ${count} lead${count === 1 ? "" : "s"}.`);
     } catch (error) {
       console.error("Failed to load lead view:", error);
@@ -534,7 +609,28 @@ const DISPATCH_CONFIG = {
     }
   }
 
-  function optimizeRoute() {
+  async function updateRouteStatus(leadIds, routeStatus) {
+    const response = await fetch(getApiUrl("/api/update-route-status"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        leadIds,
+        route_status: routeStatus,
+      }),
+    });
+
+    const json = await response.json();
+
+    if (!response.ok || !json || json.success !== true) {
+      throw new Error(json?.error || "Failed to update route status");
+    }
+
+    return json;
+  }
+
+  async function optimizeRoute() {
     const selectedLeads = state.allLeads.filter((lead) =>
       state.selectedLeadIds.includes(getLeadId(lead))
     );
@@ -563,9 +659,31 @@ const DISPATCH_CONFIG = {
       return 0;
     });
 
-    state.optimizedRoute = sorted;
-    renderRoute(sorted);
-    setStatus(`Optimized ${sorted.length} stop${sorted.length === 1 ? "" : "s"} using hybrid priority.`);
+    try {
+      const routeLeadIds = sorted.map(getLeadId);
+      await updateRouteStatus(routeLeadIds, "routed");
+
+      const routeData = {
+        id: `route_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        startAddress: getStartAddress(),
+        stops: sorted,
+      };
+
+      setActiveRoute(routeData);
+
+      state.optimizedRoute = sorted;
+      renderRoute(sorted);
+      state.selectedLeadIds = [];
+      updateSelectionNote();
+      updateResumeRouteButton();
+
+      window.location.href = "./route.html";
+    } catch (error) {
+      console.error("Failed to optimize route:", error);
+      setError("Could not create route. Please try again.");
+      setStatus("Route creation failed.");
+    }
   }
 
   async function handleRefresh() {
@@ -596,6 +714,16 @@ const DISPATCH_CONFIG = {
       els.optimizeBtn.addEventListener("click", optimizeRoute);
     }
 
+    if (els.resumeRouteBtn) {
+      els.resumeRouteBtn.addEventListener("click", function () {
+        window.location.href = "./route.html";
+      });
+    }
+
+    if (els.startModeSelect) {
+      els.startModeSelect.addEventListener("change", updateStartInputUi);
+    }
+
     els.filterCards.forEach((card) => {
       card.addEventListener("click", function () {
         const filterKey = normalizeString(card.dataset.filter);
@@ -608,6 +736,8 @@ const DISPATCH_CONFIG = {
     bindEvents();
     setActiveFilterUi(null);
     updateSelectionNote();
+    updateStartInputUi();
+    updateResumeRouteButton();
     renderRoute([]);
 
     await Promise.all([
