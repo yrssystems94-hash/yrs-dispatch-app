@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YRS Route</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  />
+
   <style>
     :root {
       --bg: #f4f6f8;
@@ -11,12 +18,15 @@
       --text: #14212f;
       --muted: #637487;
       --border: #e4ebf1;
-      --shadow: 0 8px 24px rgba(20, 33, 47, 0.08);
+      --shadow: 0 10px 28px rgba(20, 33, 47, 0.08);
       --success: #1f8f4e;
       --danger: #d64545;
       --dark: #2f4558;
       --today: #2f7cf6;
-      --route-line: #cfe0ff;
+      --urgent: #d64545;
+      --chip: #eef4ff;
+      --chip-border: #dbe7ff;
+      --map-panel-bg: #eef4ff;
     }
 
     * {
@@ -31,7 +41,7 @@
     }
 
     .app {
-      max-width: 760px;
+      max-width: 860px;
       margin: 0 auto;
       padding: 16px;
     }
@@ -51,21 +61,56 @@
 
     h1 {
       margin: 0 0 8px 0;
-      font-size: 24px;
-      line-height: 1.2;
+      font-size: 28px;
+      line-height: 1.15;
     }
 
     .subtext {
       font-size: 14px;
       color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .status {
+      min-height: 18px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .panel {
+      background: var(--card);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .panel-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 14px;
       line-height: 1.45;
+    }
+
+    .top-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      margin-bottom: 16px;
     }
 
     .actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      margin: 16px 0;
     }
 
     .btn {
@@ -77,6 +122,17 @@
       cursor: pointer;
       min-height: 50px;
       box-shadow: var(--shadow);
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
     }
 
     .btn-primary {
@@ -99,92 +155,140 @@
       color: white;
     }
 
-    .panel {
-      background: var(--card);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 16px;
-      border: 1px solid var(--border);
-      margin-bottom: 16px;
+    .route-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
     }
 
-    .panel-title {
-      font-size: 18px;
+    .meta-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .meta-label {
+      font-size: 11px;
       font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       margin-bottom: 6px;
     }
 
-    .panel-subtitle {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 14px;
-      line-height: 1.4;
+    .meta-value {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.35;
     }
 
-    .route-visual {
-      position: relative;
+    .route-selector-wrap {
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      padding-left: 8px;
+      gap: 8px;
+      margin-bottom: 14px;
     }
 
-    .route-node {
-      position: relative;
-      padding-left: 26px;
-    }
-
-    .route-node::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 5px;
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      background: var(--today);
-      z-index: 2;
-    }
-
-    .route-node::after {
-      content: "";
-      position: absolute;
-      left: 5px;
-      top: 18px;
-      width: 2px;
-      height: calc(100% + 8px);
-      background: var(--route-line);
-      z-index: 1;
-    }
-
-    .route-node:last-child::after {
-      display: none;
-    }
-
-    .route-node.start::before {
-      background: var(--success);
-    }
-
-    .route-node-label {
+    .route-selector-label {
       font-size: 12px;
       font-weight: 800;
+      color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--muted);
-      margin-bottom: 4px;
     }
 
-    .route-node-address {
-      font-size: 15px;
+    .route-selector {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 12px;
+      background: white;
+      font-size: 14px;
       font-weight: 700;
+      color: var(--text);
+    }
+
+    .map-shell {
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: var(--map-panel-bg);
+    }
+
+    .map-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+    }
+
+    .map-title-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .map-title {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .map-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
       line-height: 1.4;
     }
 
-    .route-node-meta {
-      margin-top: 4px;
-      font-size: 13px;
+    .legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .legend-chip {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--dark);
+      white-space: nowrap;
+    }
+
+    #routeMap {
+      width: 100%;
+      height: 360px;
+      background: #dfe9f6;
+    }
+
+    .map-fallback {
+      padding: 18px;
+      font-size: 14px;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .stats-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .stat-chip {
+      background: var(--chip);
+      border: 1px solid var(--chip-border);
+      color: var(--dark);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
     }
 
     .stops {
@@ -195,16 +299,23 @@
 
     .stop-card {
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: 18px;
       padding: 14px;
       background: #fff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .stop-card.active {
+      border-color: var(--today);
+      box-shadow: 0 8px 20px rgba(47, 124, 246, 0.12);
+      background: #f8fbff;
     }
 
     .stop-top {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 10px;
+      gap: 12px;
       margin-bottom: 8px;
     }
 
@@ -218,9 +329,9 @@
     }
 
     .stop-address {
-      font-size: 15px;
-      font-weight: 700;
-      line-height: 1.45;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.4;
     }
 
     .badge {
@@ -235,38 +346,102 @@
       background: var(--dark);
     }
 
+    .badge.urgent {
+      background: var(--urgent);
+    }
+
+    .badge.arrived {
+      background: #f39a2f;
+    }
+
+    .badge.done {
+      background: var(--success);
+    }
+
     .stop-meta {
       font-size: 13px;
       color: var(--muted);
       margin: 6px 0 10px;
-      line-height: 1.4;
+      line-height: 1.45;
     }
 
     .stop-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
       gap: 10px;
-    }
-
-    .status {
-      min-height: 18px;
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 8px;
+      margin-top: 10px;
     }
 
     .empty-state {
-      padding: 24px 14px;
+      padding: 28px 14px;
       text-align: center;
       color: var(--muted);
       font-size: 14px;
-      line-height: 1.45;
+      line-height: 1.5;
     }
 
-    @media (max-width: 480px) {
-      .actions,
-      .stop-actions {
+    .leaflet-container {
+      font: inherit;
+    }
+
+    .yrs-stop-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--today);
+      color: white;
+      font-size: 13px;
+      font-weight: 800;
+      border: 3px solid white;
+      box-shadow: 0 6px 16px rgba(20, 33, 47, 0.18);
+    }
+
+    .yrs-stop-pin.urgent {
+      background: var(--urgent);
+    }
+
+    .yrs-stop-pin.done {
+      background: var(--success);
+    }
+
+    .yrs-stop-pin.arrived {
+      background: #f39a2f;
+    }
+
+    .yrs-start-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 42px;
+      height: 42px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: var(--success);
+      color: white;
+      font-size: 12px;
+      font-weight: 800;
+      border: 3px solid white;
+      box-shadow: 0 6px 16px rgba(20, 33, 47, 0.18);
+    }
+
+    @media (max-width: 760px) {
+      .top-grid {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .actions,
+      .stop-actions,
+      .route-meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      #routeMap {
+        height: 320px;
       }
     }
   </style>
@@ -277,31 +452,107 @@
       <div class="eyebrow">Your Roof Specialist</div>
       <h1>Current Route</h1>
       <div class="subtext">
-        This screen keeps your active route separate from the dashboard so routed jobs stay out of your main lead list.
+        Real local-area map view with numbered stops, live route flow, and route actions kept separate from your dispatch board.
       </div>
       <div id="statusBar" class="status"></div>
     </div>
 
-    <div class="actions">
-      <button id="openFullRouteBtn" class="btn btn-primary" type="button">Open Full Route in Google Maps</button>
-      <button id="backToDashboardBtn" class="btn btn-dark" type="button">Back to Dashboard</button>
-      <button id="deleteRouteBtn" class="btn btn-danger" type="button">Delete Route & Restore Jobs</button>
-      <button id="refreshRouteBtn" class="btn btn-success" type="button">Refresh Route Screen</button>
+    <div class="top-grid">
+      <div class="panel">
+        <div class="route-selector-wrap">
+          <label for="routeSelector" class="route-selector-label">Active Route</label>
+          <select id="routeSelector" class="route-selector">
+            <option value="">No routes</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button id="openFullRouteBtn" class="btn btn-primary" type="button">Open Full Route in Google Maps</button>
+          <button id="backToDashboardBtn" class="btn btn-dark" type="button">Back to Dashboard</button>
+          <button id="deleteRouteBtn" class="btn btn-danger" type="button">Delete Route & Restore Jobs</button>
+          <button id="refreshRouteBtn" class="btn btn-success" type="button">Refresh Route Screen</button>
+        </div>
+
+        <div class="route-meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Route Label</div>
+            <div id="routeLabelValue" class="meta-value">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Starting Point</div>
+            <div id="startAddressValue" class="meta-value">—</div>
+          </div>
+        </div>
+
+        <div id="routeStats" class="stats-row"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Route Summary</div>
+        <div class="panel-subtitle">
+          A polished mini route planner view for the local area, driven by your actual stop coordinates and order.
+        </div>
+
+        <div class="route-meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Stops</div>
+            <div id="stopCountValue" class="meta-value">0</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Urgent Stops</div>
+            <div id="urgentCountValue" class="meta-value">0</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Completed</div>
+            <div id="doneCountValue" class="meta-value">0</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Route Type</div>
+            <div id="routeTypeValue" class="meta-value">Standard</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
-      <div class="panel-title">Route Visualization</div>
-      <div class="panel-subtitle">Simple visual route flow from your selected starting point through the optimized stops.</div>
-      <div id="routeVisual" class="route-visual"></div>
+      <div class="panel-title">Local Route Map</div>
+      <div class="panel-subtitle">
+        Numbered stop pins and route line centered on your real job area. Tap a stop below to focus the matching pin.
+      </div>
+
+      <div class="map-shell">
+        <div class="map-header">
+          <div class="map-title-row">
+            <div>
+              <div class="map-title">Live Route View</div>
+              <div id="mapNote" class="map-note">Loading route map...</div>
+            </div>
+
+            <div class="legend">
+              <div class="legend-chip">Green = Start</div>
+              <div class="legend-chip">Blue = Standard Stop</div>
+              <div class="legend-chip">Red = Urgent Stop</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="routeMap"></div>
+      </div>
     </div>
 
     <div class="panel">
       <div class="panel-title">Stops</div>
-      <div class="panel-subtitle">Each stop stays marked as routed until you delete the route or move into execution controls later.</div>
+      <div class="panel-subtitle">
+        Route execution tools stay below the map so the top stays visual and clean.
+      </div>
       <div id="stopsList" class="stops"></div>
     </div>
   </div>
 
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    crossorigin=""
+  ></script>
   <script src="./route.js"></script>
 </body>
 </html>
