@@ -15,11 +15,26 @@ const ROUTE_CONFIG = {
     backToDashboardBtn: document.getElementById("backToDashboardBtn"),
     deleteRouteBtn: document.getElementById("deleteRouteBtn"),
     refreshRouteBtn: document.getElementById("refreshRouteBtn"),
-    routeVisual: document.getElementById("routeVisual"),
     stopsList: document.getElementById("stopsList"),
     statusBar: document.getElementById("statusBar"),
     routeSelector: document.getElementById("routeSelector"),
+    routeLabelValue: document.getElementById("routeLabelValue"),
+    startAddressValue: document.getElementById("startAddressValue"),
+    stopCountValue: document.getElementById("stopCountValue"),
+    urgentCountValue: document.getElementById("urgentCountValue"),
+    doneCountValue: document.getElementById("doneCountValue"),
+    routeTypeValue: document.getElementById("routeTypeValue"),
+    routeStats: document.getElementById("routeStats"),
+    mapNote: document.getElementById("mapNote"),
+    routeMap: document.getElementById("routeMap"),
   };
+
+  let map = null;
+  let tileLayer = null;
+  let routePolyline = null;
+  let markerLayer = null;
+  let activeMarkersByLeadId = new Map();
+  let fallbackMessageRendered = false;
 
   function normalizeString(value) {
     return typeof value === "string" ? value.trim() : "";
@@ -124,6 +139,37 @@ const ROUTE_CONFIG = {
     );
   }
 
+  function getLat(lead) {
+    const value = Number(lead?.lat);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function getLng(lead) {
+    const value = Number(lead?.lng);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function hasCoordinates(lead) {
+    return getLat(lead) !== null && getLng(lead) !== null;
+  }
+
+  function isUrgentStop(lead) {
+    const routeStatus = normalizeString(lead?.route_status).toLowerCase();
+    const priority = normalizeString(lead?.priority).toLowerCase();
+    const serviceType = normalizeString(lead?.service_type).toLowerCase();
+
+    if (routeStatus === "done" || routeStatus === "arrived") {
+      return false;
+    }
+
+    return (
+      priority.includes("urgent") ||
+      priority.includes("emergency") ||
+      serviceType.includes("emergency") ||
+      serviceType.includes("leak")
+    );
+  }
+
   function getBadgeText(lead) {
     const routeStatus = normalizeString(lead?.route_status).toLowerCase();
     const priority = normalizeString(lead?.priority).toLowerCase();
@@ -195,9 +241,9 @@ const ROUTE_CONFIG = {
   }
 
   function renderEmpty() {
-    if (els.routeVisual) {
-      els.routeVisual.innerHTML = `
-        <div class="empty-state">
+    if (els.routeMap) {
+      els.routeMap.innerHTML = `
+        <div class="map-fallback">
           No active route found. Go back to the dashboard and optimize a route first.
         </div>
       `;
@@ -220,125 +266,101 @@ const ROUTE_CONFIG = {
       els.routeSelector.disabled = true;
     }
 
+    if (els.routeLabelValue) els.routeLabelValue.textContent = "—";
+    if (els.startAddressValue) els.startAddressValue.textContent = "—";
+    if (els.stopCountValue) els.stopCountValue.textContent = "0";
+    if (els.urgentCountValue) els.urgentCountValue.textContent = "0";
+    if (els.doneCountValue) els.doneCountValue.textContent = "0";
+    if (els.routeTypeValue) els.routeTypeValue.textContent = "Standard";
+    if (els.routeStats) els.routeStats.innerHTML = "";
+    if (els.mapNote) {
+      els.mapNote.textContent =
+        "No route is loaded yet. Build one from the dispatch dashboard.";
+    }
+
+    destroyMap();
     setStatus("No active route loaded.");
   }
 
-  function buildVisualNodes(route) {
-    const stops = Array.isArray(route?.stops) ? route.stops : [];
-    const startAddress = normalizeString(route?.startAddress);
+  function destroyMap() {
+    activeMarkersByLeadId = new Map();
+    fallbackMessageRendered = false;
 
-    if (!stops.length) {
-      return `
-        <div class="empty-state">
-          No stops to display.
-        </div>
-      `;
+    if (map) {
+      map.remove();
+      map = null;
+      tileLayer = null;
+      routePolyline = null;
+      markerLayer = null;
     }
+  }
 
-    const width = 100;
-    const height = 100;
+  function ensureMapContainer() {
+    if (!els.routeMap) return;
+    if (els.routeMap.querySelector(".leaflet-container")) return;
+    els.routeMap.innerHTML = "";
+  }
 
-    const nodes = [
-      {
-        type: "start",
-        label: "Start",
-        address: startAddress || "Starting point not set",
-        x: 10,
-        y: 50,
-      },
-      ...stops.map((lead, index) => {
-        const x = Math.min(90, 24 + index * 17);
-        const y = index % 2 === 0 ? 28 : 72;
+  function initMapIfNeeded() {
+    if (!els.routeMap) return null;
+    if (map) return map;
 
-        return {
-          type: "stop",
-          label: `Stop ${index + 1}`,
-          address: getLeadAddress(lead),
-          meta: `${formatDisplay(lead?.service_type)} • ${formatDisplay(
-            lead?.priority
-          )}`,
-          badge: getBadgeText(lead),
-          x,
-          y,
-        };
-      }),
-    ];
+    ensureMapContainer();
 
-    const lineSegments = [];
+    map = L.map(els.routeMap, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+    });
 
-    for (let i = 0; i < nodes.length - 1; i += 1) {
-      const a = nodes[i];
-      const b = nodes[i + 1];
+    tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    });
 
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    tileLayer.addTo(map);
+    markerLayer = L.layerGroup().addTo(map);
 
-      lineSegments.push(`
-        <div
-          style="
-            position:absolute;
-            left:${a.x}%;
-            top:${a.y}%;
-            width:${length}%;
-            height:3px;
-            background:#93a8c5;
-            transform-origin:left center;
-            transform:rotate(${angle}deg);
-            border-radius:999px;
-          "
-        ></div>
-      `);
-    }
+    return map;
+  }
 
-    const nodeHtml = nodes
-      .map((node, index) => {
-        const badgeClass =
-          node.type === "start"
-            ? "start-badge"
-            : node.badge && ["Urgent", "Emergency"].includes(node.badge)
-            ? "urgent"
-            : "";
+  function createStopIcon(index, lead) {
+    const badgeClass = getBadgeClass(lead);
+    const extraClass = badgeClass ? ` ${badgeClass}` : "";
+    return L.divIcon({
+      html: `<div class="yrs-stop-pin${extraClass}">${index + 1}</div>`,
+      className: "",
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      popupAnchor: [0, -14],
+    });
+  }
 
-        return `
-          <div
-            class="route-node ${node.type === "start" ? "start" : ""}"
-            style="
-              position:absolute;
-              left:${node.x}%;
-              top:${node.y}%;
-              transform:translate(-50%, -50%);
-              max-width:170px;
-              min-width:120px;
-              z-index:${20 + index};
-            "
-          >
-            <div class="route-node-label">${escapeHtml(node.label)}</div>
-            <div class="route-node-address">${escapeHtml(node.address)}</div>
-            ${
-              node.meta
-                ? `<div class="route-node-meta">${escapeHtml(node.meta)}</div>`
-                : ""
-            }
-            ${
-              node.badge
-                ? `<div class="badge ${escapeHtml(badgeClass)}">${escapeHtml(
-                    node.badge
-                  )}</div>`
-                : ""
-            }
-          </div>
-        `;
-      })
-      .join("");
+  function createStartIcon() {
+    return L.divIcon({
+      html: `<div class="yrs-start-pin">Start</div>`,
+      className: "",
+      iconSize: [46, 42],
+      iconAnchor: [23, 21],
+      popupAnchor: [0, -18],
+    });
+  }
 
-    return `
-      <div style="position:relative; width:100%; min-height:360px; background:#eef4ff; border-radius:16px; overflow:hidden;">
-        ${lineSegments.join("")}
-        ${nodeHtml}
-      </div>
-    `;
+  function focusStopByLeadId(leadId) {
+    const marker = activeMarkersByLeadId.get(normalizeString(leadId));
+    if (!marker || !map) return;
+
+    const latLng = marker.getLatLng();
+    map.flyTo(latLng, Math.max(map.getZoom(), 14), {
+      animate: true,
+      duration: 0.6,
+    });
+
+    marker.openPopup();
+
+    Array.from(document.querySelectorAll(".stop-card")).forEach((card) => {
+      const cardLeadId = normalizeString(card.getAttribute("data-lead-id"));
+      card.classList.toggle("active", cardLeadId === normalizeString(leadId));
+    });
   }
 
   function renderRouteSelector() {
@@ -370,107 +392,292 @@ const ROUTE_CONFIG = {
       .join("");
   }
 
+  function renderRouteStats(route) {
+    const stops = Array.isArray(route?.stops) ? route.stops : [];
+    const urgentCount = stops.filter(isUrgentStop).length;
+    const doneCount = stops.filter(
+      (stop) => normalizeString(stop?.route_status).toLowerCase() === "done"
+    ).length;
+    const groupedCount = stops.filter((stop) => Number(stop?.grouped_count || 1) > 1).length;
+    const routeType = normalizeString(route?.type || "standard");
+    const cityList = Array.from(
+      new Set(
+        stops
+          .map((stop) => normalizeString(stop?.city))
+          .filter(Boolean)
+      )
+    );
+
+    if (els.stopCountValue) els.stopCountValue.textContent = String(stops.length);
+    if (els.urgentCountValue) els.urgentCountValue.textContent = String(urgentCount);
+    if (els.doneCountValue) els.doneCountValue.textContent = String(doneCount);
+    if (els.routeTypeValue) {
+      els.routeTypeValue.textContent =
+        routeType === "emergency" ? "Emergency" : "Standard";
+    }
+
+    if (els.routeStats) {
+      const chips = [
+        `${stops.length} Stop${stops.length === 1 ? "" : "s"}`,
+        `${urgentCount} Urgent`,
+        `${doneCount} Done`,
+        groupedCount ? `${groupedCount} Multi-job Stop${groupedCount === 1 ? "" : "s"}` : null,
+        cityList.length ? cityList.join(" / ") : null,
+      ].filter(Boolean);
+
+      els.routeStats.innerHTML = chips
+        .map((chip) => `<div class="stat-chip">${escapeHtml(chip)}</div>`)
+        .join("");
+    }
+  }
+
+  function renderMeta(route) {
+    const label =
+      normalizeString(route?.label) ||
+      `Route - ${new Date(route?.createdAt || Date.now()).toLocaleString()}`;
+
+    if (els.routeLabelValue) {
+      els.routeLabelValue.textContent = label;
+    }
+
+    if (els.startAddressValue) {
+      els.startAddressValue.textContent = normalizeString(route?.startAddress) || "Not set";
+    }
+
+    renderRouteStats(route);
+  }
+
+  function renderMap(route) {
+    const stops = Array.isArray(route?.stops) ? route.stops : [];
+    const startAddress = normalizeString(route?.startAddress);
+    const m = initMapIfNeeded();
+
+    if (!m) return;
+
+    activeMarkersByLeadId = new Map();
+
+    if (markerLayer) {
+      markerLayer.clearLayers();
+    }
+
+    if (routePolyline) {
+      routePolyline.remove();
+      routePolyline = null;
+    }
+
+    const stopsWithCoords = stops.filter(hasCoordinates);
+    const boundsPoints = [];
+
+    if (!stopsWithCoords.length) {
+      destroyMap();
+      if (els.routeMap && !fallbackMessageRendered) {
+        els.routeMap.innerHTML = `
+          <div class="map-fallback">
+            This route does not have enough map coordinates yet to render a live local-area map.
+            The stops are still listed below and the Google Maps route button will still work.
+          </div>
+        `;
+        fallbackMessageRendered = true;
+      }
+
+      if (els.mapNote) {
+        els.mapNote.textContent =
+          "No map pins available yet because these stops are missing coordinates.";
+      }
+      return;
+    }
+
+    const firstStop = stopsWithCoords[0];
+    const startLat = getLat(firstStop);
+    const startLng = getLng(firstStop);
+
+    const startMarker = L.marker([startLat, startLng], {
+      icon: createStartIcon(),
+      zIndexOffset: 1000,
+    }).bindPopup(
+      `<strong>Start</strong><br>${escapeHtml(startAddress || getLeadAddress(firstStop))}`
+    );
+
+    markerLayer.addLayer(startMarker);
+    boundsPoints.push([startLat, startLng]);
+
+    const linePoints = [];
+
+    stops.forEach((lead, index) => {
+      if (!hasCoordinates(lead)) return;
+
+      const lat = getLat(lead);
+      const lng = getLng(lead);
+      const leadId = getLeadId(lead);
+
+      linePoints.push([lat, lng]);
+      boundsPoints.push([lat, lng]);
+
+      const popupHtml = `
+        <strong>Stop ${index + 1}</strong><br>
+        ${escapeHtml(getLeadAddress(lead))}<br>
+        ${escapeHtml(formatDisplay(lead?.service_type))} • ${escapeHtml(getBadgeText(lead))}
+      `;
+
+      const marker = L.marker([lat, lng], {
+        icon: createStopIcon(index, lead),
+      }).bindPopup(popupHtml);
+
+      marker.on("click", function () {
+        focusStopByLeadId(leadId);
+      });
+
+      markerLayer.addLayer(marker);
+      activeMarkersByLeadId.set(leadId, marker);
+    });
+
+    if (linePoints.length >= 2) {
+      routePolyline = L.polyline(linePoints, {
+        color: "#2f7cf6",
+        weight: 5,
+        opacity: 0.78,
+        lineJoin: "round",
+      }).addTo(m);
+    }
+
+    if (boundsPoints.length === 1) {
+      m.setView(boundsPoints[0], 14);
+    } else {
+      m.fitBounds(boundsPoints, { padding: [30, 30] });
+    }
+
+    if (els.mapNote) {
+      els.mapNote.textContent = `${stopsWithCoords.length} mapped stop${
+        stopsWithCoords.length === 1 ? "" : "s"
+      } rendered in your local route area.`;
+    }
+  }
+
+  function renderStops(route) {
+    const stops = Array.isArray(route?.stops) ? route.stops : [];
+
+    if (!stops.length) {
+      if (els.stopsList) {
+        els.stopsList.innerHTML = `
+          <div class="empty-state">
+            No stops found for this route.
+          </div>
+        `;
+      }
+      return;
+    }
+
+    if (!els.stopsList) return;
+
+    els.stopsList.innerHTML = stops
+      .map((lead, index) => {
+        const address = getLeadAddress(lead);
+        const serviceType = formatDisplay(lead?.service_type);
+        const priority = formatDisplay(lead?.priority);
+        const preferredTime = formatDisplay(lead?.preferred_time);
+        const phone = formatDisplay(lead?.phone, "");
+        const routeStatus = normalizeString(lead?.route_status || "routed");
+        const groupedCount = Number(lead?.grouped_count || 1);
+        const hasMap = hasCoordinates(lead) || Boolean(address);
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          address
+        )}`;
+
+        return `
+          <div class="stop-card" data-lead-id="${escapeHtml(getLeadId(lead))}">
+            <div class="stop-top">
+              <div>
+                <div class="stop-number">Stop ${index + 1}</div>
+                <div class="stop-address">${escapeHtml(address)}</div>
+              </div>
+              <div class="badge ${escapeHtml(getBadgeClass(lead))}">
+                ${escapeHtml(getBadgeText(lead))}
+              </div>
+            </div>
+
+            <div class="stop-meta">
+              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
+          preferredTime
+        )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
+            </div>
+
+            <div class="stop-meta">
+              Current Status: ${escapeHtml(routeStatus || "routed")}
+            </div>
+
+            <div class="stop-actions">
+              <button class="btn btn-success" type="button" data-phone="${escapeHtml(
+                phone
+              )}">Call</button>
+              <button class="btn btn-primary" type="button" data-map="${escapeHtml(
+                mapsUrl
+              )}" ${hasMap ? "" : "disabled"}>Map</button>
+              <button class="btn btn-dark" type="button" data-arrived="${escapeHtml(
+                getLeadId(lead)
+              )}">Arrived</button>
+              <button class="btn btn-danger" type="button" data-done="${escapeHtml(
+                getLeadId(lead)
+              )}">Done</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    Array.from(els.stopsList.querySelectorAll(".stop-card")).forEach((card) => {
+      card.addEventListener("click", function () {
+        const leadId = normalizeString(card.getAttribute("data-lead-id"));
+        if (!leadId) return;
+        focusStopByLeadId(leadId);
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-phone]")).forEach((btn) => {
+      btn.addEventListener("click", function (event) {
+        event.stopPropagation();
+        const phone = normalizeString(btn.getAttribute("data-phone"));
+        if (!phone) {
+          window.alert("No phone number available for this stop.");
+          return;
+        }
+        window.location.href = `tel:${phone}`;
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-map]")).forEach((btn) => {
+      btn.addEventListener("click", function (event) {
+        event.stopPropagation();
+        const mapUrl = normalizeString(btn.getAttribute("data-map"));
+        if (!mapUrl) return;
+        window.open(mapUrl, "_blank", "noopener,noreferrer");
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-arrived]")).forEach((btn) => {
+      btn.addEventListener("click", async function (event) {
+        event.stopPropagation();
+        const leadId = normalizeString(btn.getAttribute("data-arrived"));
+        if (!leadId) return;
+        await markStopStatus(leadId, "arrived");
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-done]")).forEach((btn) => {
+      btn.addEventListener("click", async function (event) {
+        event.stopPropagation();
+        const leadId = normalizeString(btn.getAttribute("data-done"));
+        if (!leadId) return;
+        await markStopStatus(leadId, "done");
+      });
+    });
+  }
+
   function renderRoute(route) {
     const stops = Array.isArray(route?.stops) ? route.stops : [];
 
     if (!stops.length) {
       renderEmpty();
       return;
-    }
-
-    if (els.routeVisual) {
-      els.routeVisual.innerHTML = buildVisualNodes(route);
-    }
-
-    if (els.stopsList) {
-      els.stopsList.innerHTML = stops
-        .map((lead, index) => {
-          const address = getLeadAddress(lead);
-          const serviceType = formatDisplay(lead?.service_type);
-          const priority = formatDisplay(lead?.priority);
-          const preferredTime = formatDisplay(lead?.preferred_time);
-          const phone = formatDisplay(lead?.phone, "");
-          const routeStatus = normalizeString(lead?.route_status || "routed");
-          const groupedCount = Number(lead?.grouped_count || 1);
-          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-            address
-          )}`;
-
-          return `
-            <div class="stop-card" data-lead-id="${escapeHtml(getLeadId(lead))}">
-              <div class="stop-top">
-                <div>
-                  <div class="stop-number">Stop ${index + 1}</div>
-                  <div class="stop-address">${escapeHtml(address)}</div>
-                </div>
-                <div class="badge ${escapeHtml(getBadgeClass(lead))}">
-                  ${escapeHtml(getBadgeText(lead))}
-                </div>
-              </div>
-
-              <div class="stop-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-            preferredTime
-          )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
-              </div>
-
-              <div class="stop-meta">
-                Current Status: ${escapeHtml(routeStatus)}
-              </div>
-
-              <div class="stop-actions">
-                <button class="btn btn-success" type="button" data-phone="${escapeHtml(
-                  phone
-                )}">Call</button>
-                <button class="btn btn-primary" type="button" data-map="${escapeHtml(
-                  mapsUrl
-                )}">Map</button>
-                <button class="btn btn-secondary" type="button" data-arrived="${escapeHtml(
-                  getLeadId(lead)
-                )}">Arrived</button>
-                <button class="btn btn-dark" type="button" data-done="${escapeHtml(
-                  getLeadId(lead)
-                )}">Done</button>
-              </div>
-            </div>
-          `;
-        })
-        .join("");
-
-      Array.from(els.stopsList.querySelectorAll("[data-phone]")).forEach((btn) => {
-        btn.addEventListener("click", function () {
-          const phone = normalizeString(btn.getAttribute("data-phone"));
-          if (!phone) {
-            window.alert("No phone number available for this stop.");
-            return;
-          }
-          window.location.href = `tel:${phone}`;
-        });
-      });
-
-      Array.from(els.stopsList.querySelectorAll("[data-map]")).forEach((btn) => {
-        btn.addEventListener("click", function () {
-          const mapUrl = normalizeString(btn.getAttribute("data-map"));
-          if (!mapUrl) return;
-          window.open(mapUrl, "_blank", "noopener,noreferrer");
-        });
-      });
-
-      Array.from(els.stopsList.querySelectorAll("[data-arrived]")).forEach((btn) => {
-        btn.addEventListener("click", async function () {
-          const leadId = normalizeString(btn.getAttribute("data-arrived"));
-          if (!leadId) return;
-          await markStopStatus(leadId, "arrived");
-        });
-      });
-
-      Array.from(els.stopsList.querySelectorAll("[data-done]")).forEach((btn) => {
-        btn.addEventListener("click", async function () {
-          const leadId = normalizeString(btn.getAttribute("data-done"));
-          if (!leadId) return;
-          await markStopStatus(leadId, "done");
-        });
-      });
     }
 
     if (els.openFullRouteBtn) {
@@ -482,10 +689,11 @@ const ROUTE_CONFIG = {
     }
 
     renderRouteSelector();
+    renderMeta(route);
+    renderMap(route);
+    renderStops(route);
 
-    setStatus(
-      `Route loaded: ${stops.length} stop${stops.length === 1 ? "" : "s"}.`
-    );
+    setStatus(`Route loaded: ${stops.length} stop${stops.length === 1 ? "" : "s"}.`);
   }
 
   async function markStopStatus(leadId, status) {
