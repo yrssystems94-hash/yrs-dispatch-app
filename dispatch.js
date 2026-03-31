@@ -4,8 +4,11 @@ const DISPATCH_CONFIG = {
     window.location.hostname === "localhost"
       ? "http://localhost:4000"
       : "https://yrs-lead-api.onrender.com",
+
   defaultStartAddress: "10 Carlyle Pl, Kitchener, ON N2P 1R6",
-  activeRouteStorageKey: "yrs_active_route",
+
+  routesStorageKey: "yrs_routes",
+  activeRouteIdStorageKey: "yrs_active_route_id",
 };
 
 (function () {
@@ -14,9 +17,12 @@ const DISPATCH_CONFIG = {
     showAllBtn: document.getElementById("showAllBtn"),
     clearFilterBtn: document.getElementById("clearFilterBtn"),
     optimizeBtn: document.getElementById("optimizeBtn"),
+    emergencyOptimizeBtn: document.getElementById("emergencyOptimizeBtn"),
     resumeRouteBtn: document.getElementById("resumeRouteBtn"),
+
     startModeSelect: document.getElementById("startModeSelect"),
     customStartInput: document.getElementById("customStartInput"),
+
     statusBar: document.getElementById("statusBar"),
     panelTitle: document.getElementById("panelTitle"),
     panelSubtitle: document.getElementById("panelSubtitle"),
@@ -64,18 +70,18 @@ const DISPATCH_CONFIG = {
   }
 
   function getLeadId(lead) {
-    return normalizeString(lead.lead_id) || normalizeString(lead.id);
+    return normalizeString(lead?.lead_id) || normalizeString(lead?.id);
   }
 
   function getLeadAddress(lead) {
     return (
-      normalizeString(lead.property_address) ||
-      normalizeString(lead.full_address) ||
+      normalizeString(lead?.property_address) ||
+      normalizeString(lead?.full_address) ||
       [
-        normalizeString(lead.property_address),
-        normalizeString(lead.city),
-        normalizeString(lead.province),
-        normalizeString(lead.postal_code),
+        normalizeString(lead?.property_address),
+        normalizeString(lead?.city),
+        normalizeString(lead?.province),
+        normalizeString(lead?.postal_code),
       ]
         .filter(Boolean)
         .join(", ")
@@ -83,35 +89,98 @@ const DISPATCH_CONFIG = {
   }
 
   function getLeadPhone(lead) {
-    return normalizeString(lead.phone);
+    return normalizeString(lead?.phone);
   }
 
-  function getActiveRoute() {
+  function normalizeAddress(address) {
+    return normalizeString(address)
+      .toLowerCase()
+      .replace(/\./g, "")
+      .replace(/,/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\bstreet\b/g, "st")
+      .replace(/\bavenue\b/g, "ave")
+      .replace(/\broad\b/g, "rd")
+      .replace(/\bdrive\b/g, "dr")
+      .replace(/\blane\b/g, "ln")
+      .replace(/\bcourt\b/g, "crt")
+      .replace(/\bplace\b/g, "pl")
+      .trim();
+  }
+
+  function getRoutes() {
     try {
-      const raw = window.localStorage.getItem(DISPATCH_CONFIG.activeRouteStorageKey);
-      if (!raw) return null;
+      const raw = window.localStorage.getItem(DISPATCH_CONFIG.routesStorageKey);
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : null;
+      return Array.isArray(parsed) ? parsed : [];
     } catch (_) {
-      return null;
+      return [];
     }
   }
 
-  function setActiveRoute(routeData) {
+  function setRoutes(routes) {
     window.localStorage.setItem(
-      DISPATCH_CONFIG.activeRouteStorageKey,
-      JSON.stringify(routeData)
+      DISPATCH_CONFIG.routesStorageKey,
+      JSON.stringify(Array.isArray(routes) ? routes : [])
     );
   }
 
-  function clearActiveRoute() {
-    window.localStorage.removeItem(DISPATCH_CONFIG.activeRouteStorageKey);
+  function getActiveRouteId() {
+    return normalizeString(
+      window.localStorage.getItem(DISPATCH_CONFIG.activeRouteIdStorageKey)
+    );
+  }
+
+  function setActiveRouteId(routeId) {
+    window.localStorage.setItem(
+      DISPATCH_CONFIG.activeRouteIdStorageKey,
+      normalizeString(routeId)
+    );
+  }
+
+  function clearActiveRouteId() {
+    window.localStorage.removeItem(DISPATCH_CONFIG.activeRouteIdStorageKey);
+  }
+
+  function getActiveRoute() {
+    const routeId = getActiveRouteId();
+    const routes = getRoutes();
+
+    if (!routeId) {
+      return routes.length ? routes[routes.length - 1] : null;
+    }
+
+    return routes.find((route) => normalizeString(route.id) === routeId) || null;
+  }
+
+  function saveRoute(routeData) {
+    const routes = getRoutes();
+    const nextRoutes = [...routes, routeData];
+    setRoutes(nextRoutes);
+    setActiveRouteId(routeData.id);
+  }
+
+  function removeRouteFromStorage(routeId) {
+    const nextRoutes = getRoutes().filter(
+      (route) => normalizeString(route.id) !== normalizeString(routeId)
+    );
+    setRoutes(nextRoutes);
+
+    const activeRouteId = getActiveRouteId();
+    if (activeRouteId === normalizeString(routeId)) {
+      if (nextRoutes.length) {
+        setActiveRouteId(nextRoutes[nextRoutes.length - 1].id);
+      } else {
+        clearActiveRouteId();
+      }
+    }
   }
 
   function updateResumeRouteButton() {
     if (!els.resumeRouteBtn) return;
-    const activeRoute = getActiveRoute();
-    els.resumeRouteBtn.hidden = !activeRoute;
+    const routes = getRoutes();
+    els.resumeRouteBtn.hidden = routes.length === 0;
   }
 
   function getStartAddress() {
@@ -127,38 +196,8 @@ const DISPATCH_CONFIG = {
 
   function updateStartInputUi() {
     if (!els.startModeSelect || !els.customStartInput) return;
-
     const isCustom = normalizeString(els.startModeSelect.value) === "custom";
     els.customStartInput.hidden = !isCustom;
-  }
-
-  function getLeadBadgeClass(lead) {
-    const priority = normalizeString(lead.priority).toLowerCase();
-    const serviceType = normalizeString(lead.service_type).toLowerCase();
-    const details = normalizeString(lead.details).toLowerCase();
-
-    if (
-      priority.includes("urgent") ||
-      priority.includes("emergency") ||
-      serviceType.includes("emergency") ||
-      serviceType.includes("leak") ||
-      details.includes("leak") ||
-      details.includes("urgent")
-    ) {
-      return "urgent";
-    }
-
-    return "";
-  }
-
-  function getLeadBadgeText(lead) {
-    const priority = normalizeString(lead.priority);
-    const routeStatus = normalizeString(lead.route_status) || "unrouted";
-
-    if (priority.toLowerCase().includes("urgent")) return "Urgent";
-    if (normalizeString(lead.service_type).toLowerCase().includes("emergency")) return "Emergency";
-
-    return routeStatus;
   }
 
   function setStatus(message) {
@@ -180,15 +219,25 @@ const DISPATCH_CONFIG = {
   }
 
   function setLoadingButtons() {
+    const busy = state.isLoadingCounts || state.isLoadingLeads;
+
     if (els.refreshBtn) {
-      els.refreshBtn.disabled = state.isLoadingCounts || state.isLoadingLeads;
-      els.refreshBtn.textContent =
-        state.isLoadingCounts || state.isLoadingLeads ? "Loading..." : "Refresh";
+      els.refreshBtn.disabled = busy;
+      els.refreshBtn.textContent = busy ? "Loading..." : "Refresh";
     }
 
     if (els.optimizeBtn) {
       els.optimizeBtn.disabled = state.isLoadingLeads;
-      els.optimizeBtn.textContent = state.isLoadingLeads ? "Loading..." : "Optimize Today";
+      els.optimizeBtn.textContent = state.isLoadingLeads
+        ? "Loading..."
+        : "Optimize Today";
+    }
+
+    if (els.emergencyOptimizeBtn) {
+      els.emergencyOptimizeBtn.disabled = state.isLoadingLeads;
+      els.emergencyOptimizeBtn.textContent = state.isLoadingLeads
+        ? "Loading..."
+        : "Emergency Optimize";
     }
   }
 
@@ -225,11 +274,11 @@ const DISPATCH_CONFIG = {
   function getFilterSubtitle(filterKey) {
     switch (filterKey) {
       case "urgent":
-        return "Leaks, emergencies, and priority jobs first";
+        return "Leaks, emergencies, and high-pressure jobs first";
       case "today":
         return "Jobs assigned or due today";
       case "overdue":
-        return "Leads older than 48 hours and not completed";
+        return "Older jobs still needing action";
       case "unrouted":
         return "Dispatch-ready leads not yet routed";
       default:
@@ -266,9 +315,7 @@ const DISPATCH_CONFIG = {
   async function fetchJson(path) {
     const response = await fetch(getApiUrl(path), {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       cache: "no-store",
     });
 
@@ -280,6 +327,22 @@ const DISPATCH_CONFIG = {
 
     if (!json || json.success !== true) {
       throw new Error(json?.error || "Request did not return success");
+    }
+
+    return json;
+  }
+
+  async function postJson(path, body) {
+    const response = await fetch(getApiUrl(path), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (!response.ok || !json || json.success !== true) {
+      throw new Error(json?.error || `POST failed: ${path}`);
     }
 
     return json;
@@ -304,9 +367,13 @@ const DISPATCH_CONFIG = {
     if (!els.selectionNote) return;
 
     const count = state.selectedLeadIds.length;
+    const routesCount = getRoutes().length;
 
     if (count === 0) {
-      els.selectionNote.textContent = "Select jobs first, then optimize your day.";
+      els.selectionNote.textContent =
+        routesCount > 0
+          ? `Select jobs first, then optimize your day. You currently have ${routesCount} saved route${routesCount === 1 ? "" : "s"}.`
+          : "Select jobs first, then optimize your day.";
       return;
     }
 
@@ -318,9 +385,9 @@ const DISPATCH_CONFIG = {
   }
 
   function isLeadUrgent(lead) {
-    const priority = normalizeString(lead.priority).toLowerCase();
-    const serviceType = normalizeString(lead.service_type).toLowerCase();
-    const details = normalizeString(lead.details).toLowerCase();
+    const priority = normalizeString(lead?.priority).toLowerCase();
+    const serviceType = normalizeString(lead?.service_type).toLowerCase();
+    const details = normalizeString(lead?.details).toLowerCase();
 
     return (
       priority.includes("urgent") ||
@@ -335,14 +402,16 @@ const DISPATCH_CONFIG = {
   }
 
   function isLeadOverdue(lead) {
-    const submittedAt = normalizeString(lead.submitted_at) || normalizeString(lead.received_at);
+    const submittedAt =
+      normalizeString(lead?.submitted_at) || normalizeString(lead?.received_at);
+
     if (!submittedAt) return false;
 
     const parsed = new Date(submittedAt);
     if (Number.isNaN(parsed.getTime())) return false;
 
-    const routeStatus = normalizeString(lead.route_status).toLowerCase();
-    const status = normalizeString(lead.status).toLowerCase();
+    const routeStatus = normalizeString(lead?.route_status).toLowerCase();
+    const status = normalizeString(lead?.status).toLowerCase();
 
     if (routeStatus === "done" || status === "completed") {
       return false;
@@ -353,13 +422,22 @@ const DISPATCH_CONFIG = {
   }
 
   function getPreferredTimeWeight(lead) {
-    const preferredTime = normalizeString(lead.preferred_time).toLowerCase();
+    const preferredTime = normalizeString(lead?.preferred_time).toLowerCase();
 
     if (preferredTime.includes("morning")) return 20;
     if (preferredTime.includes("afternoon")) return 10;
     if (preferredTime.includes("anytime")) return 5;
 
     return 0;
+  }
+
+  function getCityClusterWeight(lead) {
+    const city = normalizeString(lead?.city).toLowerCase();
+
+    if (city.includes("kitchener")) return 15;
+    if (city.includes("waterloo")) return 12;
+    if (city.includes("cambridge")) return 10;
+    return 4;
   }
 
   function getHybridScore(lead) {
@@ -369,8 +447,123 @@ const DISPATCH_CONFIG = {
     if (isLeadOverdue(lead)) score += 50;
 
     score += getPreferredTimeWeight(lead);
+    score += getCityClusterWeight(lead);
 
     return score;
+  }
+
+  function getLeadBadgeClass(lead) {
+    return isLeadUrgent(lead) ? "urgent" : "";
+  }
+
+  function getLeadBadgeText(lead) {
+    const priority = normalizeString(lead?.priority);
+    const routeStatus = normalizeString(lead?.route_status) || "unrouted";
+
+    if (priority.toLowerCase().includes("urgent")) return "Urgent";
+    if (normalizeString(lead?.service_type).toLowerCase().includes("emergency")) {
+      return "Emergency";
+    }
+
+    return routeStatus;
+  }
+
+  function filterOutRoutedLeads(leads) {
+    return (Array.isArray(leads) ? leads : []).filter((lead) => {
+      const routeStatus = normalizeString(lead?.route_status).toLowerCase();
+      return !["routed", "arrived", "done"].includes(routeStatus);
+    });
+  }
+
+  function dedupeByAddress(leads) {
+    const seen = new Set();
+
+    return (Array.isArray(leads) ? leads : []).filter((lead) => {
+      const normalized = normalizeAddress(getLeadAddress(lead));
+      if (!normalized) return true;
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+  }
+
+  function dedupeSelectedLeadIds(leadIds) {
+    const seen = new Set();
+    const selectedLeads = state.allLeads.filter((lead) =>
+      leadIds.includes(getLeadId(lead))
+    );
+
+    return selectedLeads
+      .filter((lead) => {
+        const normalized = normalizeAddress(getLeadAddress(lead));
+        if (!normalized) return true;
+        if (seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+      })
+      .map(getLeadId)
+      .filter(Boolean);
+  }
+
+  function groupLeadsForRouting(leads) {
+    const groups = new Map();
+
+    (Array.isArray(leads) ? leads : []).forEach((lead) => {
+      const key = `${normalizeString(lead?.city).toLowerCase()}::${normalizeAddress(
+        getLeadAddress(lead)
+      )}`;
+
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+
+      groups.get(key).push(lead);
+    });
+
+    return Array.from(groups.values());
+  }
+
+  function orderLeadGroups(leadGroups) {
+    return [...leadGroups].sort((groupA, groupB) => {
+      const bestA = Math.max(...groupA.map(getHybridScore));
+      const bestB = Math.max(...groupB.map(getHybridScore));
+
+      if (bestB !== bestA) return bestB - bestA;
+
+      const cityA = normalizeString(groupA[0]?.city).toLowerCase();
+      const cityB = normalizeString(groupB[0]?.city).toLowerCase();
+
+      if (cityA < cityB) return -1;
+      if (cityA > cityB) return 1;
+
+      const addressA = normalizeAddress(getLeadAddress(groupA[0]));
+      const addressB = normalizeAddress(getLeadAddress(groupB[0]));
+
+      if (addressA < addressB) return -1;
+      if (addressA > addressB) return 1;
+
+      return 0;
+    });
+  }
+
+  function buildSmarterRoute(selectedLeads, emergencyOnly) {
+    const sourceLeads = emergencyOnly
+      ? selectedLeads.filter(isLeadUrgent)
+      : selectedLeads;
+
+    const deduped = dedupeByAddress(sourceLeads);
+    const grouped = groupLeadsForRouting(deduped);
+    const orderedGroups = orderLeadGroups(grouped);
+
+    return orderedGroups.map((group, index) => {
+      const lead = group[0];
+      return {
+        ...lead,
+        route_order: index,
+        grouped_lead_ids: group.map(getLeadId).filter(Boolean),
+        grouped_count: group.length,
+      };
+    });
   }
 
   function toggleLeadSelection(lead) {
@@ -380,7 +573,10 @@ const DISPATCH_CONFIG = {
     if (state.selectedLeadIds.includes(leadId)) {
       state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
     } else {
-      state.selectedLeadIds = [...state.selectedLeadIds, leadId];
+      state.selectedLeadIds = dedupeSelectedLeadIds([
+        ...state.selectedLeadIds,
+        leadId,
+      ]);
     }
 
     updateSelectionNote();
@@ -388,34 +584,41 @@ const DISPATCH_CONFIG = {
   }
 
   function buildLeadCardHtml(lead) {
-    const firstName = formatDisplay(lead.first_name, "");
-    const lastName = formatDisplay(lead.last_name, "");
+    const firstName = formatDisplay(lead?.first_name, "");
+    const lastName = formatDisplay(lead?.last_name, "");
     const fullName = `${firstName} ${lastName}`.trim() || "Unnamed Lead";
 
     const address = getLeadAddress(lead);
-    const city = formatDisplay(lead.city);
-    const serviceType = formatDisplay(lead.service_type);
-    const priority = formatDisplay(lead.priority);
-    const preferredTime = formatDisplay(lead.preferred_time);
-    const routeStatus = formatDisplay(lead.route_status, "unrouted");
+    const city = formatDisplay(lead?.city);
+    const serviceType = formatDisplay(lead?.service_type);
+    const priority = formatDisplay(lead?.priority);
+    const preferredTime = formatDisplay(lead?.preferred_time);
+    const routeStatus = formatDisplay(lead?.route_status, "unrouted");
     const badgeClass = getLeadBadgeClass(lead);
     const badgeText = getLeadBadgeText(lead);
     const phone = getLeadPhone(lead);
     const selected = isSelectedLead(lead);
+    const score = getHybridScore(lead);
 
     return `
-      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(getLeadId(lead))}">
+      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(
+      getLeadId(lead)
+    )}">
         <div class="lead-select-row">
           <div class="lead-select-label">Tap to select</div>
-          <input class="lead-checkbox" type="checkbox" ${selected ? "checked" : ""} tabindex="-1" aria-hidden="true" />
+          <input class="lead-checkbox" type="checkbox" ${
+            selected ? "checked" : ""
+          } tabindex="-1" aria-hidden="true" />
         </div>
 
         <div class="lead-top">
           <div class="lead-name">${escapeHtml(fullName)}</div>
-          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</div>
+          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(
+      badgeText
+    )}</div>
         </div>
 
-        <div class="lead-address">${escapeHtml(address || `${city}`)}</div>
+        <div class="lead-address">${escapeHtml(address || city)}</div>
 
         <div class="lead-meta">
           <div class="meta-box">
@@ -439,12 +642,23 @@ const DISPATCH_CONFIG = {
           </div>
         </div>
 
+        <div class="lead-score">Route Score: ${escapeHtml(String(score))}</div>
+
         <div class="lead-actions">
-          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(phone)}">
+          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(
+            phone
+          )}">
             Call
           </button>
-          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(address)}">
+          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(
+            address
+          )}">
             Map
+          </button>
+          <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(
+            getLeadId(lead)
+          )}">
+            Delete
           </button>
         </div>
       </div>
@@ -461,14 +675,16 @@ const DISPATCH_CONFIG = {
 
     els.leadList.innerHTML = leads.map(buildLeadCardHtml).join("");
 
-    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach((card) => {
-      card.addEventListener("click", function () {
-        const leadId = normalizeString(card.getAttribute("data-lead-id"));
-        const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
-        if (!lead) return;
-        toggleLeadSelection(lead);
-      });
-    });
+    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach(
+      (card) => {
+        card.addEventListener("click", function () {
+          const leadId = normalizeString(card.getAttribute("data-lead-id"));
+          const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
+          if (!lead) return;
+          toggleLeadSelection(lead);
+        });
+      }
+    );
 
     Array.from(els.leadList.querySelectorAll("[data-phone]")).forEach((btn) => {
       btn.addEventListener("click", function (event) {
@@ -476,7 +692,7 @@ const DISPATCH_CONFIG = {
 
         const phone = normalizeString(btn.getAttribute("data-phone"));
         if (!phone) {
-          alert("No phone number available for this lead.");
+          window.alert("No phone number available for this lead.");
           return;
         }
 
@@ -490,12 +706,44 @@ const DISPATCH_CONFIG = {
 
         const address = normalizeString(btn.getAttribute("data-address"));
         if (!address) {
-          alert("No address available for this lead.");
+          window.alert("No address available for this lead.");
           return;
         }
 
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          address
+        )}`;
         window.open(mapsUrl, "_blank", "noopener,noreferrer");
+      });
+    });
+
+    Array.from(els.leadList.querySelectorAll("[data-delete]")).forEach((btn) => {
+      btn.addEventListener("click", async function (event) {
+        event.stopPropagation();
+
+        const leadId = normalizeString(btn.getAttribute("data-delete"));
+        if (!leadId) return;
+
+        const confirmed = window.confirm(
+          "Delete this lead permanently? This cannot be undone."
+        );
+
+        if (!confirmed) return;
+
+        try {
+          await postJson("/api/delete-leads", { leadIds: [leadId] });
+
+          state.selectedLeadIds = state.selectedLeadIds.filter(
+            (id) => id !== leadId
+          );
+
+          await handleRefresh();
+          setStatus("Lead deleted.");
+        } catch (error) {
+          console.error("Delete failed:", error);
+          setError("Could not delete lead.");
+          setStatus("Delete failed.");
+        }
       });
     });
   }
@@ -517,37 +765,41 @@ const DISPATCH_CONFIG = {
         <div class="route-step-address">${escapeHtml(startAddress)}</div>
         <div class="route-step-meta">Starting point for this route</div>
       </div>
+
       ${routeLeads
         .map((lead, index) => {
           const address = getLeadAddress(lead);
-          const serviceType = formatDisplay(lead.service_type);
-          const priority = formatDisplay(lead.priority);
-          const preferredTime = formatDisplay(lead.preferred_time);
+          const serviceType = formatDisplay(lead?.service_type);
+          const priority = formatDisplay(lead?.priority);
+          const preferredTime = formatDisplay(lead?.preferred_time);
           const score = getHybridScore(lead);
+          const groupedCount = Number(lead?.grouped_count || 1);
 
           return `
             <div class="route-step">
               <div class="route-step-top">
                 <div class="route-number">Stop ${index + 1}</div>
-                <div class="lead-badge ${escapeHtml(getLeadBadgeClass(lead))}">${escapeHtml(getLeadBadgeText(lead))}</div>
+                <div class="lead-badge ${escapeHtml(getLeadBadgeClass(lead))}">
+                  ${escapeHtml(getLeadBadgeText(lead))}
+                </div>
               </div>
 
               <div class="route-step-address">${escapeHtml(address)}</div>
               <div class="route-step-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${score}
+                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
+            preferredTime
+          )} • Score ${escapeHtml(String(score))}
+                ${
+                  groupedCount > 1
+                    ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop`
+                    : ""
+                }
               </div>
             </div>
           `;
         })
         .join("")}
     `;
-  }
-
-  function filterOutRoutedLeads(leads) {
-    return (Array.isArray(leads) ? leads : []).filter((lead) => {
-      const routeStatus = normalizeString(lead.route_status).toLowerCase();
-      return routeStatus !== "routed";
-    });
   }
 
   async function loadCounts() {
@@ -594,6 +846,7 @@ const DISPATCH_CONFIG = {
       const result = await fetchJson(path);
 
       state.allLeads = filterOutRoutedLeads(result.leads);
+      state.selectedLeadIds = dedupeSelectedLeadIds(state.selectedLeadIds);
       renderLeads(state.allLeads);
 
       const count = state.allLeads.length;
@@ -606,31 +859,19 @@ const DISPATCH_CONFIG = {
     } finally {
       state.isLoadingLeads = false;
       setLoadingButtons();
+      updateSelectionNote();
     }
   }
 
-  async function updateRouteStatus(leadIds, routeStatus) {
-    const response = await fetch(getApiUrl("/api/update-route-status"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        leadIds,
-        route_status: routeStatus,
-      }),
+  async function assignRoute(routeLeads, routeId) {
+    await postJson("/api/route/assign", {
+      lead_ids: routeLeads.map(getLeadId).filter(Boolean),
+      route_id: routeId,
+      assigned_day: new Date().toISOString().slice(0, 10),
     });
-
-    const json = await response.json();
-
-    if (!response.ok || !json || json.success !== true) {
-      throw new Error(json?.error || "Failed to update route status");
-    }
-
-    return json;
   }
 
-  async function optimizeRoute() {
+  async function createAndOpenRoute(emergencyOnly) {
     const selectedLeads = state.allLeads.filter((lead) =>
       state.selectedLeadIds.includes(getLeadId(lead))
     );
@@ -642,55 +883,75 @@ const DISPATCH_CONFIG = {
       return;
     }
 
-    const sorted = [...selectedLeads].sort((a, b) => {
-      const scoreDifference = getHybridScore(b) - getHybridScore(a);
-      if (scoreDifference !== 0) return scoreDifference;
+    const smarterRoute = buildSmarterRoute(selectedLeads, emergencyOnly);
 
-      const cityA = normalizeString(a.city).toLowerCase();
-      const cityB = normalizeString(b.city).toLowerCase();
-      if (cityA < cityB) return -1;
-      if (cityA > cityB) return 1;
+    if (!smarterRoute.length) {
+      state.optimizedRoute = [];
+      renderRoute([]);
+      setStatus(
+        emergencyOnly
+          ? "No emergency jobs found in your selected leads."
+          : "No valid route could be created."
+      );
+      return;
+    }
 
-      const addressA = getLeadAddress(a).toLowerCase();
-      const addressB = getLeadAddress(b).toLowerCase();
-      if (addressA < addressB) return -1;
-      if (addressA > addressB) return 1;
-
-      return 0;
-    });
+    const routeId = `route_${Date.now()}`;
+    const startAddress = getStartAddress();
 
     try {
-      const routeLeadIds = sorted.map(getLeadId);
-      await updateRouteStatus(routeLeadIds, "routed");
+      await assignRoute(smarterRoute, routeId);
 
       const routeData = {
-        id: `route_${Date.now()}`,
+        id: routeId,
+        label: emergencyOnly
+          ? `Emergency Route ${new Date().toLocaleTimeString()}`
+          : `Route ${new Date().toLocaleTimeString()}`,
         createdAt: new Date().toISOString(),
-        startAddress: getStartAddress(),
-        stops: sorted,
+        type: emergencyOnly ? "emergency" : "standard",
+        startAddress,
+        stops: smarterRoute,
       };
 
-      setActiveRoute(routeData);
+      saveRoute(routeData);
 
-      state.optimizedRoute = sorted;
-      renderRoute(sorted);
+      state.optimizedRoute = smarterRoute;
+      renderRoute(smarterRoute);
       state.selectedLeadIds = [];
       updateSelectionNote();
       updateResumeRouteButton();
 
+      await Promise.all([loadCounts(), loadLeadView(state.activeFilter)]);
       window.location.href = "./route.html";
     } catch (error) {
       console.error("Failed to optimize route:", error);
-      setError("Could not create route. Please try again.");
+      removeRouteFromStorage(routeId);
+      setError("Could not create route. Check backend route endpoints and try again.");
       setStatus("Route creation failed.");
     }
   }
 
+  async function optimizeRoute() {
+    await createAndOpenRoute(false);
+  }
+
+  async function emergencyOptimizeRoute() {
+    const emergencyLeads = state.allLeads.filter(
+      (lead) => state.selectedLeadIds.includes(getLeadId(lead)) && isLeadUrgent(lead)
+    );
+
+    if (!emergencyLeads.length) {
+      window.alert("No emergency jobs selected.");
+      return;
+    }
+
+    const emergencyLeadIds = emergencyLeads.map(getLeadId).filter(Boolean);
+    state.selectedLeadIds = dedupeSelectedLeadIds(emergencyLeadIds);
+    await createAndOpenRoute(true);
+  }
+
   async function handleRefresh() {
-    await Promise.all([
-      loadCounts(),
-      loadLeadView(state.activeFilter),
-    ]);
+    await Promise.all([loadCounts(), loadLeadView(state.activeFilter)]);
   }
 
   function bindEvents() {
@@ -712,6 +973,10 @@ const DISPATCH_CONFIG = {
 
     if (els.optimizeBtn) {
       els.optimizeBtn.addEventListener("click", optimizeRoute);
+    }
+
+    if (els.emergencyOptimizeBtn) {
+      els.emergencyOptimizeBtn.addEventListener("click", emergencyOptimizeRoute);
     }
 
     if (els.resumeRouteBtn) {
@@ -740,10 +1005,7 @@ const DISPATCH_CONFIG = {
     updateResumeRouteButton();
     renderRoute([]);
 
-    await Promise.all([
-      loadCounts(),
-      loadLeadView(null),
-    ]);
+    await Promise.all([loadCounts(), loadLeadView(null)]);
   }
 
   init();
