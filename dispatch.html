@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YRS Dispatch</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #14212f;
+      --muted: #637487;
+      --border: #e4ebf1;
+      --shadow: 0 8px 24px rgba(20, 33, 47, 0.08);
+      --urgent: #d64545;
+      --today: #2f7cf6;
+      --overdue: #ef8b2c;
+      --unrouted: #4b5563;
+      --success: #1f8f4e;
+      --dark: #2f4558;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .header {
+      margin-bottom: 16px;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .refresh-btn {
+      border: none;
+      border-radius: 12px;
+      background: var(--dark);
+      color: white;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 44px;
+      white-space: nowrap;
+    }
+
+    .refresh-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status-bar {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .filter-card {
+      border: none;
+      border-radius: 18px;
+      padding: 18px 16px;
+      color: white;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      min-height: 108px;
+    }
+
+    .filter-card .label {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      opacity: 0.95;
+    }
+
+    .filter-card .count {
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .filter-card .subtext {
+      font-size: 12px;
+      opacity: 0.9;
+      line-height: 1.35;
+    }
+
+    .filter-card.urgent { background: var(--urgent); }
+    .filter-card.today { background: var(--today); }
+    .filter-card.overdue { background: var(--overdue); }
+    .filter-card.unrouted { background: var(--unrouted); }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .control-btn {
+      flex: 1;
+      border: none;
+      border-radius: 14px;
+      background: white;
+      color: var(--text);
+      padding: 14px 12px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    .control-btn.active {
+      background: var(--dark);
+      color: white;
+    }
+
+    .panel {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .panel-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .lead-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .lead-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .lead-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .lead-name {
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .lead-badge {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-radius: 999px;
+      padding: 6px 8px;
+      white-space: nowrap;
+      color: white;
+      background: var(--unrouted);
+    }
+
+    .lead-badge.urgent {
+      background: var(--urgent);
+    }
+
+    .lead-address {
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .lead-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .meta-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .meta-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+
+    .meta-value {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .lead-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .action-btn {
+      border: none;
+      border-radius: 12px;
+      padding: 14px 12px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    .call-btn {
+      background: var(--success);
+      color: white;
+    }
+
+    .map-btn {
+      background: var(--today);
+      color: white;
+    }
+
+    .empty-state {
+      padding: 22px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .loading {
+      padding: 18px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .error {
+      padding: 14px;
+      border-radius: 14px;
+      background: #fff3f3;
+      color: #a12626;
+      border: 1px solid #f3caca;
+      margin-bottom: 12px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 480px) {
+      .title-row {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .refresh-btn {
+        width: 100%;
+      }
+
+      .filters-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .lead-meta {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="eyebrow">Your Roof Specialist</div>
+      <div class="title-row">
+        <h1>Dispatch Dashboard</h1>
+        <button id="refreshBtn" class="refresh-btn" type="button">Refresh</button>
+      </div>
+      <div id="statusBar" class="status-bar">Loading dispatch data...</div>
+    </div>
+
+    <div class="filters-grid">
+      <button class="filter-card urgent" type="button" data-filter="urgent">
+        <div class="label">Urgent</div>
+        <div class="count" id="urgentCount">0</div>
+        <div class="subtext">Leaks, emergencies, high priority</div>
+      </button>
+
+      <button class="filter-card today" type="button" data-filter="today">
+        <div class="label">Today</div>
+        <div class="count" id="todayCount">0</div>
+        <div class="subtext">Assigned or due today</div>
+      </button>
+
+      <button class="filter-card overdue" type="button" data-filter="overdue">
+        <div class="label">Overdue</div>
+        <div class="count" id="overdueCount">0</div>
+        <div class="subtext">Older than 48 hours</div>
+      </button>
+
+      <button class="filter-card unrouted" type="button" data-filter="unrouted">
+        <div class="label">Unrouted</div>
+        <div class="count" id="unroutedCount">0</div>
+        <div class="subtext">Not yet routed</div>
+      </button>
+    </div>
+
+    <div class="controls">
+      <button id="showAllBtn" class="control-btn active" type="button">All Leads</button>
+      <button id="clearFilterBtn" class="control-btn" type="button">Clear Filter</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div id="panelTitle" class="panel-title">All Leads</div>
+          <div id="panelSubtitle" class="panel-subtitle">Showing all dispatch-ready leads</div>
+        </div>
+      </div>
+
+      <div id="errorBox" class="error" hidden></div>
+      <div id="leadList" class="lead-list"></div>
+    </div>
+  </div>
+
+  <script src="./dispatch.js"></script>
+</body>
+</html>

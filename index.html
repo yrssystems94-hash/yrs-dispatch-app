@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Your Roof Specialist | Request Form</title>
+    <meta
+      name="description"
+      content="Request a roofing estimate, repair, inspection, or emergency service from Your Roof Specialist."
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Your Roof Specialist | Request Form" />
+    <meta
+      property="og:description"
+      content="Request a roofing estimate, repair, inspection, or emergency service from Your Roof Specialist."
+    />
+    <meta property="og:url" content="https://request.yrsroofing.com/" />
+    <meta property="og:site_name" content="Your Roof Specialist" />
+    <meta property="og:image" content="https://request.yrsroofing.com/logo-brand-preview-v4.png" />
+    <meta property="og:image:alt" content="Your Roof Specialist logo" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Your Roof Specialist | Request Form" />
+    <meta
+      name="twitter:description"
+      content="Request a roofing estimate, repair, inspection, or emergency service from Your Roof Specialist."
+    />
+    <meta name="twitter:image" content="https://request.yrsroofing.com/logo-brand-preview-v4.png" />
+
+    <link rel="icon" type="image/png" href="./logo-brand-preview-v4.png" />
+    <link rel="apple-touch-icon" href="./logo-brand-preview-v4.png" />
+
+    <link rel="stylesheet" href="./style.css" />
+
+    <!-- Load Google Maps + Places BEFORE app.js so autocomplete is ready -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAvtDA7oRz166OUGNFYI9qgIyoSnqcU_bU&libraries=places"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <main class="page" aria-labelledby="pageTitle">
+      <header class="hero">
+        <div class="hero__inner">
+          <div class="brand">
+            <img
+              src="./logo-brand-preview-v4.png"
+              alt="Your Roof Specialist logo"
+              class="brand__logo"
+            />
+            <div>
+              <h1 id="pageTitle" class="brand__title">Roofing Lead Intake</h1>
+              <p class="brand__subtitle">
+                Tell us about your property and we will schedule your estimate.
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="formShell" aria-label="Lead intake form">
+        <form id="leadForm" class="form" novalidate autocomplete="on">
+          <div class="topBar">
+            <div class="stepper" role="list" aria-label="Form steps">
+              <div class="stepper__progress" aria-hidden="true">
+                <div id="progressFill" class="stepper__progressFill"></div>
+              </div>
+
+              <ol id="stepList" class="stepper__list">
+                <li class="stepper__step is-active" data-step-label="Contact info">1</li>
+                <li class="stepper__step" data-step-label="Property address">2</li>
+                <li class="stepper__step" data-step-label="Service request">3</li>
+                <li class="stepper__step" data-step-label="Scheduling">4</li>
+              </ol>
+            </div>
+
+            <div class="stepMeta">
+              <div class="stepMeta__label">Step</div>
+              <div class="stepMeta__value">
+                <span id="stepNumber">1</span> / <span id="stepTotal">4</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="formErrors" class="formErrors" role="alert" aria-live="polite" hidden></div>
+
+          <section class="step" data-step="0" aria-label="Contact info">
+            <div class="sectionHeader">
+              <h2 class="sectionHeader__title">Contact info</h2>
+              <p class="sectionHeader__subtitle">
+                Please provide a real phone number or a real email address so we can reach you.
+              </p>
+            </div>
+
+            <div class="grid">
+              <div class="field">
+                <label for="firstName">
+                  First name <span class="req" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="firstName"
+                  name="given-name"
+                  type="text"
+                  required
+                  autocomplete="section-contact given-name"
+                />
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="lastName">
+                  Last name <span class="req" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="lastName"
+                  name="family-name"
+                  type="text"
+                  required
+                  autocomplete="section-contact family-name"
+                />
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="email">
+                  Email <span class="hint">(optional if phone is provided)</span>
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autocomplete="section-contact email"
+                  inputmode="email"
+                  placeholder="name@example.com"
+                />
+                <div class="field-hint">If entered, it must be a valid email address.</div>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="phone">
+                  Phone <span class="hint">(optional if email is provided)</span>
+                </label>
+                <input
+                  id="phone"
+                  name="tel"
+                  type="tel"
+                  autocomplete="section-contact tel"
+                  inputmode="tel"
+                  placeholder="(519) 555-1234"
+                />
+                <div class="field-hint">If entered, it must be a valid 10-digit phone number.</div>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="consent">
+              <div class="check">
+                <input id="smsConsent" name="smsConsent" type="checkbox" />
+                <label for="smsConsent">
+                  Text me about this request only. No promotions.
+                  <span class="hint">(optional)</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="step" data-step="1" hidden aria-label="Property address">
+            <div class="sectionHeader">
+              <h2 class="sectionHeader__title">Property address</h2>
+              <p class="sectionHeader__subtitle">Where is the work located?</p>
+            </div>
+
+            <div class="grid">
+              <div class="field field--full">
+                <label for="propertyAddress">
+                  Address <span class="req" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="propertyAddress"
+                  name="propertyAddress"
+                  type="text"
+                  required
+                  autocomplete="off"
+                  autocapitalize="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  inputmode="text"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  placeholder="123 Main St"
+                />
+                <div class="field-hint">
+                  Start typing and choose the correct Google address suggestion.
+                </div>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="addressLine2">
+                  Address line 2 <span class="hint">(optional)</span>
+                </label>
+                <input
+                  id="addressLine2"
+                  name="addressLine2"
+                  type="text"
+                  autocomplete="address-line2"
+                  placeholder="Unit, suite, side entrance, etc."
+                />
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="city">
+                  City <span class="req" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="city"
+                  name="city"
+                  type="text"
+                  required
+                  autocomplete="address-level2"
+                />
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="province">
+                  Province <span class="req" aria-hidden="true">*</span>
+                </label>
+                <select id="province" name="province" required autocomplete="address-level1">
+                  <option value="" selected disabled>Select…</option>
+                  <option value="AB">Alberta</option>
+                  <option value="BC">British Columbia</option>
+                  <option value="MB">Manitoba</option>
+                  <option value="NB">New Brunswick</option>
+                  <option value="NL">Newfoundland and Labrador</option>
+                  <option value="NS">Nova Scotia</option>
+                  <option value="NT">Northwest Territories</option>
+                  <option value="NU">Nunavut</option>
+                  <option value="ON">Ontario</option>
+                  <option value="PE">Prince Edward Island</option>
+                  <option value="QC">Quebec</option>
+                  <option value="SK">Saskatchewan</option>
+                  <option value="YT">Yukon</option>
+                </select>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="postalCode">
+                  Postal code <span class="req" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="postalCode"
+                  name="postalCode"
+                  type="text"
+                  required
+                  autocomplete="postal-code"
+                  placeholder="A1A 1A1"
+                />
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="step" data-step="2" hidden aria-label="Service request">
+            <div class="sectionHeader">
+              <h2 class="sectionHeader__title">Service request</h2>
+              <p class="sectionHeader__subtitle">What do you need help with?</p>
+            </div>
+
+            <div class="grid">
+              <div class="field field--full">
+                <label for="serviceType">
+                  Request Type <span class="req" aria-hidden="true">*</span>
+                </label>
+                <select id="serviceType" name="serviceType" required>
+                  <option value="" selected disabled>Select…</option>
+                </select>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="homeType">
+                  Property type <span class="req" aria-hidden="true">*</span>
+                </label>
+                <select id="homeType" name="homeType" required>
+                  <option value="" selected disabled>Select…</option>
+                </select>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label for="roofMaterial">
+                  Roof Type <span class="hint">(optional)</span>
+                </label>
+                <select id="roofMaterial" name="roofMaterial">
+                  <option value="" selected>Select…</option>
+                </select>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field">
+                <label>
+                  Priority <span class="req" aria-hidden="true">*</span>
+                </label>
+                <div class="radioRow">
+                  <label class="radio">
+                    <input id="priorityLow" name="priority" type="radio" value="Standard" required />
+                    <span class="radio__label">Standard</span>
+                  </label>
+                  <label class="radio">
+                    <input id="priorityMed" name="priority" type="radio" value="Urgent" required />
+                    <span class="radio__label">Urgent</span>
+                  </label>
+                </div>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field field--full">
+                <label for="details">
+                  Describe the issue <span class="hint">(optional)</span>
+                </label>
+                <textarea
+                  id="details"
+                  name="details"
+                  rows="5"
+                  placeholder="Briefly describe the issue, where it’s happening, and anything urgent we should know."
+                ></textarea>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="note">
+              We will use this information to route your request to the right estimator.
+            </div>
+          </section>
+
+          <section class="step" data-step="3" hidden aria-label="Scheduling">
+            <div class="sectionHeader">
+              <h2 class="sectionHeader__title">Scheduling</h2>
+              <p class="sectionHeader__subtitle">What time of day works best for you?</p>
+            </div>
+
+            <div class="grid">
+              <div class="field">
+                <label for="preferredTime">
+                  Preferred time <span class="req" aria-hidden="true">*</span>
+                </label>
+                <select id="preferredTime" name="preferredTime" required>
+                  <option value="" selected disabled>Select…</option>
+                </select>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field field--full">
+                <label>
+                  Preferred contact method(s) <span class="req" aria-hidden="true">*</span>
+                </label>
+                <div class="field-hint">Choose one or more options if applicable.</div>
+
+                <div class="radioGrid radioGrid--pills">
+                  <label class="radio radio--pill">
+                    <input id="contactPhone" name="contactMethod" type="checkbox" value="Phone call" />
+                    <span class="radio__label">Phone call</span>
+                  </label>
+                  <label class="radio radio--pill">
+                    <input id="contactText" name="contactMethod" type="checkbox" value="Text message" />
+                    <span class="radio__label">Text message</span>
+                  </label>
+                  <label class="radio radio--pill">
+                    <input id="contactEmail" name="contactMethod" type="checkbox" value="Email" />
+                    <span class="radio__label">Email</span>
+                  </label>
+                </div>
+
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+
+              <div class="field field--full">
+                <label for="accessNotes">
+                  Access notes <span class="hint">(optional)</span>
+                </label>
+                <textarea
+                  id="accessNotes"
+                  name="accessNotes"
+                  rows="4"
+                  placeholder="Anything helpful for access, parking, gate codes, pets, or site instructions."
+                ></textarea>
+                <div class="field-error" role="alert" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="note note--final">
+              Please be flexible with the time provided. If it doesn’t work, send two alternate days and note whether morning or afternoon is preferred. Morning appointments are ideal when possible.
+            </div>
+          </section>
+
+          <div class="form-nav">
+            <button id="backBtn" type="button" class="ghostBtn" disabled>Back</button>
+            <button id="nextBtn" type="button" class="primaryBtn">Next</button>
+            <button id="submitBtn" type="submit" class="primaryBtn" hidden>Submit request</button>
+          </div>
+
+          <p class="finePrint">
+            By submitting, you agree to be contacted about your request.
+          </p>
+        </form>
+
+        <div id="successPanel" class="successPanel" hidden aria-live="polite">
+          <div class="successPanel__card">
+            <div class="successPanel__titleRow">
+              <h2 class="successPanel__title">Request received</h2>
+              <div class="successPanel__check" aria-hidden="true"></div>
+            </div>
+
+            <p class="successPanel__subtitle">
+              Your request has been submitted successfully. We’ll follow up as quickly as possible to schedule your appointment.
+            </p>
+
+            <div class="note">
+              Please be flexible with the time provided. If it doesn’t work, send two alternate days and note whether morning or afternoon is preferred. Morning appointments are ideal when possible.
+            </div>
+
+            <div class="successPanel__actions">
+              <button id="estimatorBtn" type="button" class="primaryBtn successActionBtn" hidden>
+                Get an instant estimate
+              </button>
+              <button id="startOverBtn" type="button" class="ghostBtn successActionBtn">
+                Start another
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <noscript>This form requires JavaScript.</noscript>
+  </body>
+</html>
