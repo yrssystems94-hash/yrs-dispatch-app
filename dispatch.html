@@ -158,6 +158,46 @@
       color: white;
     }
 
+    .start-wrap {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .start-title {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .start-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .start-select,
+    .start-input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 12px;
+      font-size: 14px;
+      min-height: 48px;
+      background: white;
+      color: var(--text);
+    }
+
+    .start-help {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
     .optimize-wrap {
       margin-bottom: 16px;
     }
@@ -179,6 +219,21 @@
     .optimize-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+
+    .resume-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: var(--today);
+      color: white;
+      padding: 14px 12px;
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 48px;
+      margin-top: 10px;
     }
 
     .selection-note {
@@ -480,15 +535,36 @@
       <button id="clearFilterBtn" class="control-btn" type="button">Clear Filter</button>
     </div>
 
+    <div class="start-wrap">
+      <div class="start-title">Starting Location</div>
+      <div class="start-grid">
+        <select id="startModeSelect" class="start-select">
+          <option value="home">Home - 10 Carlyle Pl, Kitchener, ON N2P 1R6</option>
+          <option value="custom">Custom Start</option>
+        </select>
+        <input
+          id="customStartInput"
+          class="start-input"
+          type="text"
+          placeholder="Enter a custom starting address"
+          hidden
+        />
+      </div>
+      <div class="start-help">
+        Default start is your home base. You can switch to a custom start point before optimizing.
+      </div>
+    </div>
+
     <div class="optimize-wrap">
       <button id="optimizeBtn" class="optimize-btn" type="button">Optimize Today</button>
+      <button id="resumeRouteBtn" class="resume-btn" type="button" hidden>Resume Active Route</button>
       <div id="selectionNote" class="selection-note">Select jobs first, then optimize your day.</div>
     </div>
 
     <div class="panel">
       <div class="panel-header">
         <div>
-          <div class="panel-title">Optimized Route</div>
+          <div class="panel-title">Optimized Route Preview</div>
           <div class="panel-subtitle">Hybrid logic: urgency → overdue → preferred time</div>
         </div>
       </div>
@@ -502,7 +578,7 @@
       <div class="panel-header">
         <div>
           <div id="panelTitle" class="panel-title">All Leads</div>
-          <div id="panelSubtitle" class="panel-subtitle">Showing all dispatch-ready leads</div>
+          <div id="panelSubtitle" class="panel-subtitle">Showing dispatch-ready leads only</div>
         </div>
       </div>
 
