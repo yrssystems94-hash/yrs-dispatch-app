@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YRS Route</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #14212f;
+      --muted: #637487;
+      --border: #e4ebf1;
+      --shadow: 0 8px 24px rgba(20, 33, 47, 0.08);
+      --success: #1f8f4e;
+      --danger: #d64545;
+      --dark: #2f4558;
+      --today: #2f7cf6;
+      --route-line: #cfe0ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .header {
+      margin-bottom: 16px;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .subtext {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 14px;
+      padding: 15px 14px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      min-height: 50px;
+      box-shadow: var(--shadow);
+    }
+
+    .btn-primary {
+      background: var(--today);
+      color: white;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-dark {
+      background: var(--dark);
+      color: white;
+    }
+
+    .panel {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .panel-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 14px;
+      line-height: 1.4;
+    }
+
+    .route-visual {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-left: 8px;
+    }
+
+    .route-node {
+      position: relative;
+      padding-left: 26px;
+    }
+
+    .route-node::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 5px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--today);
+      z-index: 2;
+    }
+
+    .route-node::after {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 18px;
+      width: 2px;
+      height: calc(100% + 8px);
+      background: var(--route-line);
+      z-index: 1;
+    }
+
+    .route-node:last-child::after {
+      display: none;
+    }
+
+    .route-node.start::before {
+      background: var(--success);
+    }
+
+    .route-node-label {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .route-node-address {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .route-node-meta {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .stops {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .stop-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    .stop-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .stop-number {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--today);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .stop-address {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-radius: 999px;
+      padding: 6px 8px;
+      white-space: nowrap;
+      color: white;
+      background: var(--dark);
+    }
+
+    .stop-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 6px 0 10px;
+      line-height: 1.4;
+    }
+
+    .stop-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .status {
+      min-height: 18px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .empty-state {
+      padding: 24px 14px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 480px) {
+      .actions,
+      .stop-actions {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="eyebrow">Your Roof Specialist</div>
+      <h1>Current Route</h1>
+      <div class="subtext">
+        This screen keeps your active route separate from the dashboard so routed jobs stay out of your main lead list.
+      </div>
+      <div id="statusBar" class="status"></div>
+    </div>
+
+    <div class="actions">
+      <button id="openFullRouteBtn" class="btn btn-primary" type="button">Open Full Route in Google Maps</button>
+      <button id="backToDashboardBtn" class="btn btn-dark" type="button">Back to Dashboard</button>
+      <button id="deleteRouteBtn" class="btn btn-danger" type="button">Delete Route & Restore Jobs</button>
+      <button id="refreshRouteBtn" class="btn btn-success" type="button">Refresh Route Screen</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Route Visualization</div>
+      <div class="panel-subtitle">Simple visual route flow from your selected starting point through the optimized stops.</div>
+      <div id="routeVisual" class="route-visual"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Stops</div>
+      <div class="panel-subtitle">Each stop stays marked as routed until you delete the route or move into execution controls later.</div>
+      <div id="stopsList" class="stops"></div>
+    </div>
+  </div>
+
+  <script src="./route.js"></script>
+</body>
+</html>
