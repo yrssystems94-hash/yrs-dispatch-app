@@ -18,6 +18,8 @@
       --unrouted: #4b5563;
       --success: #1f8f4e;
       --dark: #2f4558;
+      --selected-bg: #eef5ff;
+      --selected-border: #2f7cf6;
     }
 
     * {
@@ -156,12 +158,44 @@
       color: white;
     }
 
+    .optimize-wrap {
+      margin-bottom: 16px;
+    }
+
+    .optimize-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: #000000;
+      color: white;
+      padding: 16px 14px;
+      font-size: 15px;
+      font-weight: 800;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 52px;
+    }
+
+    .optimize-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .selection-note {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      min-height: 18px;
+    }
+
     .panel {
       background: var(--card);
       border-radius: 20px;
       box-shadow: var(--shadow);
       padding: 14px;
       border: 1px solid var(--border);
+      margin-bottom: 16px;
     }
 
     .panel-header {
@@ -193,6 +227,37 @@
       border-radius: 16px;
       padding: 14px;
       background: #fff;
+      transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      cursor: pointer;
+    }
+
+    .lead-card.selected {
+      border: 2px solid var(--selected-border);
+      background: var(--selected-bg);
+      box-shadow: 0 8px 18px rgba(47, 124, 246, 0.12);
+    }
+
+    .lead-select-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .lead-select-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .lead-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--today);
+      pointer-events: none;
     }
 
     .lead-top {
@@ -287,6 +352,47 @@
       color: white;
     }
 
+    .route-output {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .route-step {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .route-step-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .route-number {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--today);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .route-step-address {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .route-step-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
     .empty-state {
       padding: 22px 12px;
       text-align: center;
@@ -372,6 +478,24 @@
     <div class="controls">
       <button id="showAllBtn" class="control-btn active" type="button">All Leads</button>
       <button id="clearFilterBtn" class="control-btn" type="button">Clear Filter</button>
+    </div>
+
+    <div class="optimize-wrap">
+      <button id="optimizeBtn" class="optimize-btn" type="button">Optimize Today</button>
+      <div id="selectionNote" class="selection-note">Select jobs first, then optimize your day.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Optimized Route</div>
+          <div class="panel-subtitle">Hybrid logic: urgency → overdue → preferred time</div>
+        </div>
+      </div>
+
+      <div id="routeOutput" class="route-output">
+        <div class="empty-state">No route built yet. Select leads and tap Optimize Today.</div>
+      </div>
     </div>
 
     <div class="panel">
