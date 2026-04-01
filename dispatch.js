@@ -48,6 +48,7 @@ const DISPATCH_CONFIG = {
     allLeads: [],
     selectedLeadIds: [],
     optimizedRoute: [],
+    customStartPlace: null,
   };
 
   function normalizeString(value) {
@@ -378,6 +379,16 @@ const DISPATCH_CONFIG = {
       };
     }
 
+    if (state.customStartPlace) {
+      return {
+        address:
+          state.customStartPlace.address || getStartAddress() || DISPATCH_CONFIG.defaultStartAddress,
+        lat: state.customStartPlace.lat,
+        lng: state.customStartPlace.lng,
+        source: "custom_place",
+      };
+    }
+
     return {
       address: getStartAddress(),
       lat: null,
@@ -390,6 +401,47 @@ const DISPATCH_CONFIG = {
     if (!els.startModeSelect || !els.customStartInput) return;
     els.customStartInput.hidden =
       normalizeString(els.startModeSelect.value) !== "custom";
+  }
+
+  function initCustomStartAutocomplete() {
+    if (!els.customStartInput) return;
+    if (!window.google || !window.google.maps || !window.google.maps.places) return;
+
+    const autocomplete = new window.google.maps.places.Autocomplete(
+      els.customStartInput,
+      {
+        fields: ["formatted_address", "geometry", "name"],
+        componentRestrictions: { country: "ca" },
+      }
+    );
+
+    autocomplete.addListener("place_changed", function () {
+      const place = autocomplete.getPlace();
+      const address =
+        place?.formatted_address ||
+        place?.name ||
+        normalizeString(els.customStartInput.value);
+
+      let lat = null;
+      let lng = null;
+
+      if (place?.geometry?.location) {
+        lat = Number(place.geometry.location.lat());
+        lng = Number(place.geometry.location.lng());
+      }
+
+      state.customStartPlace = {
+        address,
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+      };
+
+      els.customStartInput.value = address || els.customStartInput.value;
+    });
+
+    els.customStartInput.addEventListener("input", function () {
+      state.customStartPlace = null;
+    });
   }
 
   function setStatus(message) {
@@ -658,24 +710,6 @@ const DISPATCH_CONFIG = {
       seen.add(normalized);
       return true;
     });
-  }
-
-  function dedupeSelectedLeadIds(leadIds) {
-    const seen = new Set();
-    const selectedLeads = state.allLeads.filter((lead) =>
-      leadIds.includes(getLeadId(lead))
-    );
-
-    return selectedLeads
-      .filter((lead) => {
-        const normalized = normalizeAddress(getLeadAddress(lead));
-        if (!normalized) return true;
-        if (seen.has(normalized)) return false;
-        seen.add(normalized);
-        return true;
-      })
-      .map(getLeadId)
-      .filter(Boolean);
   }
 
   function groupLeadsForRouting(leads) {
@@ -1182,6 +1216,7 @@ const DISPATCH_CONFIG = {
         startLng: startLocation.lng,
         startSource: startLocation.source,
         endMode,
+        wasEdited: false,
         stops: smarterRoute,
       };
 
@@ -1301,6 +1336,7 @@ const DISPATCH_CONFIG = {
     updateSelectionNote();
     updateStartInputUi();
     updateResumeRouteButton();
+    initCustomStartAutocomplete();
     renderRoute([]);
 
     await Promise.all([loadCounts(), loadLeadView(null)]);
