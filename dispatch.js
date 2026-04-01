@@ -23,6 +23,7 @@ const DISPATCH_CONFIG = {
     resumeRouteBtn: document.getElementById("resumeRouteBtn"),
     startModeSelect: document.getElementById("startModeSelect"),
     customStartInput: document.getElementById("customStartInput"),
+    endModeSelect: document.getElementById("endModeSelect"),
     statusBar: document.getElementById("statusBar"),
     panelTitle: document.getElementById("panelTitle"),
     panelSubtitle: document.getElementById("panelSubtitle"),
@@ -177,6 +178,10 @@ const DISPATCH_CONFIG = {
     return normalizeString(els.startModeSelect?.value) || "home";
   }
 
+  function getEndMode() {
+    return normalizeString(els.endModeSelect?.value) || "last";
+  }
+
   function getHomeStartCoords() {
     const lat = Number(DISPATCH_CONFIG.defaultStartLat);
     const lng = Number(DISPATCH_CONFIG.defaultStartLng);
@@ -188,13 +193,13 @@ const DISPATCH_CONFIG = {
     return { lat, lng };
   }
 
+  function getSelectedLeadsInOrder() {
+    return state.allLeads.filter((lead) => state.selectedLeadIds.includes(getLeadId(lead)));
+  }
+
   function getStartAddressFromSelectedFirst() {
-    const selectedLeads = state.allLeads.filter((lead) =>
-      state.selectedLeadIds.includes(getLeadId(lead))
-    );
-
+    const selectedLeads = getSelectedLeadsInOrder();
     if (!selectedLeads.length) return "";
-
     return getLeadAddress(selectedLeads[0]);
   }
 
@@ -228,10 +233,7 @@ const DISPATCH_CONFIG = {
     }
 
     if (mode === "first") {
-      const selectedLeads = state.allLeads.filter((lead) =>
-        state.selectedLeadIds.includes(getLeadId(lead))
-      );
-
+      const selectedLeads = getSelectedLeadsInOrder();
       const firstLead = selectedLeads[0] || null;
 
       if (firstLead) {
@@ -294,16 +296,12 @@ const DISPATCH_CONFIG = {
 
     if (els.optimizeBtn) {
       els.optimizeBtn.disabled = state.isLoadingLeads;
-      els.optimizeBtn.textContent = state.isLoadingLeads
-        ? "Loading..."
-        : "Optimize Route";
+      els.optimizeBtn.textContent = state.isLoadingLeads ? "Loading..." : "Optimize Route";
     }
 
     if (els.emergencyOptimizeBtn) {
       els.emergencyOptimizeBtn.disabled = state.isLoadingLeads;
-      els.emergencyOptimizeBtn.textContent = state.isLoadingLeads
-        ? "Loading..."
-        : "Emergency Optimize";
+      els.emergencyOptimizeBtn.textContent = state.isLoadingLeads ? "Loading..." : "Emergency Optimize";
     }
   }
 
@@ -381,9 +379,7 @@ const DISPATCH_CONFIG = {
   async function fetchJson(path) {
     const response = await fetch(getApiUrl(path), {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       cache: "no-store",
     });
 
@@ -403,9 +399,7 @@ const DISPATCH_CONFIG = {
   async function postJson(path, body) {
     const response = await fetch(getApiUrl(path), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {}),
     });
 
@@ -553,9 +547,7 @@ const DISPATCH_CONFIG = {
 
   function dedupeSelectedLeadIds(leadIds) {
     const seen = new Set();
-    const selectedLeads = state.allLeads.filter((lead) =>
-      leadIds.includes(getLeadId(lead))
-    );
+    const selectedLeads = state.allLeads.filter((lead) => leadIds.includes(getLeadId(lead)));
 
     return selectedLeads
       .filter((lead) => {
@@ -611,10 +603,7 @@ const DISPATCH_CONFIG = {
   }
 
   function buildSmarterRoute(selectedLeads, emergencyOnly) {
-    const sourceLeads = emergencyOnly
-      ? selectedLeads.filter(isLeadUrgent)
-      : selectedLeads;
-
+    const sourceLeads = emergencyOnly ? selectedLeads.filter(isLeadUrgent) : selectedLeads;
     const deduped = dedupeByAddress(sourceLeads);
     const grouped = groupLeadsForRouting(deduped);
     const orderedGroups = orderLeadGroups(grouped);
@@ -637,10 +626,7 @@ const DISPATCH_CONFIG = {
     if (state.selectedLeadIds.includes(leadId)) {
       state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
     } else {
-      state.selectedLeadIds = dedupeSelectedLeadIds([
-        ...state.selectedLeadIds,
-        leadId,
-      ]);
+      state.selectedLeadIds = dedupeSelectedLeadIds([...state.selectedLeadIds, leadId]);
     }
 
     updateSelectionNote();
@@ -670,9 +656,7 @@ const DISPATCH_CONFIG = {
       )}">
         <div class="lead-select-row">
           <div class="lead-select-label">Tap to select</div>
-          <input class="lead-checkbox" type="checkbox" ${
-            selected ? "checked" : ""
-          } tabindex="-1" aria-hidden="true" />
+          <input class="lead-checkbox" type="checkbox" ${selected ? "checked" : ""} tabindex="-1" aria-hidden="true" />
         </div>
 
         <div class="lead-top">
@@ -764,7 +748,6 @@ const DISPATCH_CONFIG = {
     Array.from(els.leadList.querySelectorAll("[data-delete]")).forEach((btn) => {
       btn.addEventListener("click", async function (event) {
         event.stopPropagation();
-
         const leadId = normalizeString(btn.getAttribute("data-delete"));
         if (!leadId) return;
 
@@ -773,7 +756,6 @@ const DISPATCH_CONFIG = {
 
         try {
           await postJson("/api/delete-leads", { leadIds: [leadId] });
-
           state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
           await handleRefresh();
           setStatus("Lead deleted.");
@@ -793,12 +775,16 @@ const DISPATCH_CONFIG = {
     }
 
     const startAddress = getStartAddress();
+    const endMode = getEndMode();
+
     const startLabel =
       getStartMode() === "home"
         ? "Home Address"
         : getStartMode() === "first"
         ? "First Selected Address"
         : "Custom Address";
+
+    const endLabel = endMode === "round_trip" ? "Round Trip" : "Last Location";
 
     els.routeOutput.innerHTML = `
       <div class="route-step">
@@ -838,6 +824,23 @@ const DISPATCH_CONFIG = {
           `;
         })
         .join("")}
+
+      <div class="route-step">
+        <div class="route-step-top">
+          <div class="route-number">End</div>
+          <div class="lead-badge">${escapeHtml(endLabel)}</div>
+        </div>
+        <div class="route-step-address">${
+          endMode === "round_trip"
+            ? escapeHtml(startAddress)
+            : escapeHtml(getLeadAddress(routeLeads[routeLeads.length - 1]) || "Last route stop")
+        }</div>
+        <div class="route-step-meta">${
+          endMode === "round_trip"
+            ? "Route returns to the start point."
+            : "Route ends at the last stop."
+        }</div>
+      </div>
     `;
   }
 
@@ -936,6 +939,7 @@ const DISPATCH_CONFIG = {
     }
 
     const startLocation = await resolveStartLocation();
+    const endMode = getEndMode();
     const routeId = `route_${Date.now()}`;
 
     try {
@@ -952,6 +956,7 @@ const DISPATCH_CONFIG = {
         startLat: startLocation.lat,
         startLng: startLocation.lng,
         startSource: startLocation.source,
+        endMode,
         stops: smarterRoute,
       };
 
