@@ -6,6 +6,8 @@ const DISPATCH_CONFIG = {
       : "https://yrs-lead-api.onrender.com",
 
   defaultStartAddress: "10 Carlyle Pl, Kitchener, ON N2P 1R6",
+  defaultStartLat: 43.4057,
+  defaultStartLng: -80.4446,
 
   routesStorageKey: "yrs_routes",
   activeRouteIdStorageKey: "yrs_active_route_id",
@@ -19,10 +21,8 @@ const DISPATCH_CONFIG = {
     optimizeBtn: document.getElementById("optimizeBtn"),
     emergencyOptimizeBtn: document.getElementById("emergencyOptimizeBtn"),
     resumeRouteBtn: document.getElementById("resumeRouteBtn"),
-
     startModeSelect: document.getElementById("startModeSelect"),
     customStartInput: document.getElementById("customStartInput"),
-
     statusBar: document.getElementById("statusBar"),
     panelTitle: document.getElementById("panelTitle"),
     panelSubtitle: document.getElementById("panelSubtitle"),
@@ -30,12 +30,10 @@ const DISPATCH_CONFIG = {
     routeOutput: document.getElementById("routeOutput"),
     errorBox: document.getElementById("errorBox"),
     selectionNote: document.getElementById("selectionNote"),
-
     urgentCount: document.getElementById("urgentCount"),
     todayCount: document.getElementById("todayCount"),
     overdueCount: document.getElementById("overdueCount"),
     unroutedCount: document.getElementById("unroutedCount"),
-
     filterCards: Array.from(document.querySelectorAll("[data-filter]")),
   };
 
@@ -92,6 +90,16 @@ const DISPATCH_CONFIG = {
     return normalizeString(lead?.phone);
   }
 
+  function getLeadLat(lead) {
+    const lat = Number(lead?.lat);
+    return Number.isFinite(lat) ? lat : null;
+  }
+
+  function getLeadLng(lead) {
+    const lng = Number(lead?.lng);
+    return Number.isFinite(lng) ? lng : null;
+  }
+
   function normalizeAddress(address) {
     return normalizeString(address)
       .toLowerCase()
@@ -143,24 +151,6 @@ const DISPATCH_CONFIG = {
     window.localStorage.removeItem(DISPATCH_CONFIG.activeRouteIdStorageKey);
   }
 
-  function getActiveRoute() {
-    const routeId = getActiveRouteId();
-    const routes = getRoutes();
-
-    if (!routeId) {
-      return routes.length ? routes[routes.length - 1] : null;
-    }
-
-    return routes.find((route) => normalizeString(route.id) === routeId) || null;
-  }
-
-  function saveRoute(routeData) {
-    const routes = getRoutes();
-    const nextRoutes = [...routes, routeData];
-    setRoutes(nextRoutes);
-    setActiveRouteId(routeData.id);
-  }
-
   function removeRouteFromStorage(routeId) {
     const nextRoutes = getRoutes().filter(
       (route) => normalizeString(route.id) !== normalizeString(routeId)
@@ -183,15 +173,91 @@ const DISPATCH_CONFIG = {
     els.resumeRouteBtn.hidden = routes.length === 0;
   }
 
+  function getStartMode() {
+    return normalizeString(els.startModeSelect?.value) || "home";
+  }
+
+  function getHomeStartCoords() {
+    const lat = Number(DISPATCH_CONFIG.defaultStartLat);
+    const lng = Number(DISPATCH_CONFIG.defaultStartLng);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return { lat: null, lng: null };
+    }
+
+    return { lat, lng };
+  }
+
+  function getStartAddressFromSelectedFirst() {
+    const selectedLeads = state.allLeads.filter((lead) =>
+      state.selectedLeadIds.includes(getLeadId(lead))
+    );
+
+    if (!selectedLeads.length) return "";
+
+    return getLeadAddress(selectedLeads[0]);
+  }
+
   function getStartAddress() {
-    const mode = normalizeString(els.startModeSelect?.value) || "home";
+    const mode = getStartMode();
 
     if (mode === "custom") {
       const custom = normalizeString(els.customStartInput?.value);
       return custom || DISPATCH_CONFIG.defaultStartAddress;
     }
 
+    if (mode === "first") {
+      const firstAddress = getStartAddressFromSelectedFirst();
+      return firstAddress || DISPATCH_CONFIG.defaultStartAddress;
+    }
+
     return DISPATCH_CONFIG.defaultStartAddress;
+  }
+
+  async function resolveStartLocation() {
+    const mode = getStartMode();
+
+    if (mode === "home") {
+      const coords = getHomeStartCoords();
+      return {
+        address: DISPATCH_CONFIG.defaultStartAddress,
+        lat: coords.lat,
+        lng: coords.lng,
+        source: "home",
+      };
+    }
+
+    if (mode === "first") {
+      const selectedLeads = state.allLeads.filter((lead) =>
+        state.selectedLeadIds.includes(getLeadId(lead))
+      );
+
+      const firstLead = selectedLeads[0] || null;
+
+      if (firstLead) {
+        return {
+          address: getLeadAddress(firstLead) || DISPATCH_CONFIG.defaultStartAddress,
+          lat: getLeadLat(firstLead),
+          lng: getLeadLng(firstLead),
+          source: "first_selected",
+        };
+      }
+
+      const coords = getHomeStartCoords();
+      return {
+        address: DISPATCH_CONFIG.defaultStartAddress,
+        lat: coords.lat,
+        lng: coords.lng,
+        source: "home_fallback",
+      };
+    }
+
+    return {
+      address: getStartAddress(),
+      lat: null,
+      lng: null,
+      source: "custom_unresolved",
+    };
   }
 
   function updateStartInputUi() {
@@ -230,7 +296,7 @@ const DISPATCH_CONFIG = {
       els.optimizeBtn.disabled = state.isLoadingLeads;
       els.optimizeBtn.textContent = state.isLoadingLeads
         ? "Loading..."
-        : "Optimize Today";
+        : "Optimize Route";
     }
 
     if (els.emergencyOptimizeBtn) {
@@ -315,7 +381,9 @@ const DISPATCH_CONFIG = {
   async function fetchJson(path) {
     const response = await fetch(getApiUrl(path), {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       cache: "no-store",
     });
 
@@ -335,7 +403,9 @@ const DISPATCH_CONFIG = {
   async function postJson(path, body) {
     const response = await fetch(getApiUrl(path), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(body || {}),
     });
 
@@ -372,8 +442,8 @@ const DISPATCH_CONFIG = {
     if (count === 0) {
       els.selectionNote.textContent =
         routesCount > 0
-          ? `Select jobs first, then optimize your day. You currently have ${routesCount} saved route${routesCount === 1 ? "" : "s"}.`
-          : "Select jobs first, then optimize your day.";
+          ? `Select jobs first, then optimize your route. You currently have ${routesCount} saved route${routesCount === 1 ? "" : "s"}.`
+          : "Select jobs first, then optimize your route.";
       return;
     }
 
@@ -402,9 +472,7 @@ const DISPATCH_CONFIG = {
   }
 
   function isLeadOverdue(lead) {
-    const submittedAt =
-      normalizeString(lead?.submitted_at) || normalizeString(lead?.received_at);
-
+    const submittedAt = normalizeString(lead?.submitted_at) || normalizeString(lead?.received_at);
     if (!submittedAt) return false;
 
     const parsed = new Date(submittedAt);
@@ -427,7 +495,6 @@ const DISPATCH_CONFIG = {
     if (preferredTime.includes("morning")) return 20;
     if (preferredTime.includes("afternoon")) return 10;
     if (preferredTime.includes("anytime")) return 5;
-
     return 0;
   }
 
@@ -442,13 +509,10 @@ const DISPATCH_CONFIG = {
 
   function getHybridScore(lead) {
     let score = 0;
-
     if (isLeadUrgent(lead)) score += 100;
     if (isLeadOverdue(lead)) score += 50;
-
     score += getPreferredTimeWeight(lead);
     score += getCityClusterWeight(lead);
-
     return score;
   }
 
@@ -602,8 +666,8 @@ const DISPATCH_CONFIG = {
 
     return `
       <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(
-      getLeadId(lead)
-    )}">
+        getLeadId(lead)
+      )}">
         <div class="lead-select-row">
           <div class="lead-select-label">Tap to select</div>
           <input class="lead-checkbox" type="checkbox" ${
@@ -613,9 +677,7 @@ const DISPATCH_CONFIG = {
 
         <div class="lead-top">
           <div class="lead-name">${escapeHtml(fullName)}</div>
-          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(
-      badgeText
-    )}</div>
+          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</div>
         </div>
 
         <div class="lead-address">${escapeHtml(address || city)}</div>
@@ -645,21 +707,11 @@ const DISPATCH_CONFIG = {
         <div class="lead-score">Route Score: ${escapeHtml(String(score))}</div>
 
         <div class="lead-actions">
-          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(
-            phone
-          )}">
-            Call
-          </button>
-          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(
-            address
-          )}">
-            Map
-          </button>
+          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(phone)}">Call</button>
+          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(address)}">Map</button>
           <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(
             getLeadId(lead)
-          )}">
-            Delete
-          </button>
+          )}">Delete</button>
         </div>
       </div>
     `;
@@ -675,27 +727,23 @@ const DISPATCH_CONFIG = {
 
     els.leadList.innerHTML = leads.map(buildLeadCardHtml).join("");
 
-    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach(
-      (card) => {
-        card.addEventListener("click", function () {
-          const leadId = normalizeString(card.getAttribute("data-lead-id"));
-          const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
-          if (!lead) return;
-          toggleLeadSelection(lead);
-        });
-      }
-    );
+    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach((card) => {
+      card.addEventListener("click", function () {
+        const leadId = normalizeString(card.getAttribute("data-lead-id"));
+        const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
+        if (!lead) return;
+        toggleLeadSelection(lead);
+      });
+    });
 
     Array.from(els.leadList.querySelectorAll("[data-phone]")).forEach((btn) => {
       btn.addEventListener("click", function (event) {
         event.stopPropagation();
-
         const phone = normalizeString(btn.getAttribute("data-phone"));
         if (!phone) {
-          window.alert("No phone number available for this lead.");
+          alert("No phone number available for this lead.");
           return;
         }
-
         window.location.href = `tel:${phone}`;
       });
     });
@@ -703,16 +751,12 @@ const DISPATCH_CONFIG = {
     Array.from(els.leadList.querySelectorAll("[data-address]")).forEach((btn) => {
       btn.addEventListener("click", function (event) {
         event.stopPropagation();
-
         const address = normalizeString(btn.getAttribute("data-address"));
         if (!address) {
-          window.alert("No address available for this lead.");
+          alert("No address available for this lead.");
           return;
         }
-
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          address
-        )}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
         window.open(mapsUrl, "_blank", "noopener,noreferrer");
       });
     });
@@ -724,19 +768,13 @@ const DISPATCH_CONFIG = {
         const leadId = normalizeString(btn.getAttribute("data-delete"));
         if (!leadId) return;
 
-        const confirmed = window.confirm(
-          "Delete this lead permanently? This cannot be undone."
-        );
-
+        const confirmed = window.confirm("Delete this lead permanently? This cannot be undone.");
         if (!confirmed) return;
 
         try {
           await postJson("/api/delete-leads", { leadIds: [leadId] });
 
-          state.selectedLeadIds = state.selectedLeadIds.filter(
-            (id) => id !== leadId
-          );
-
+          state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
           await handleRefresh();
           setStatus("Lead deleted.");
         } catch (error) {
@@ -750,17 +788,23 @@ const DISPATCH_CONFIG = {
 
   function renderRoute(routeLeads) {
     if (!Array.isArray(routeLeads) || routeLeads.length === 0) {
-      renderRouteEmptyState("No route built yet. Select leads and tap Optimize Today.");
+      renderRouteEmptyState("No route built yet. Select leads and tap Optimize Route.");
       return;
     }
 
     const startAddress = getStartAddress();
+    const startLabel =
+      getStartMode() === "home"
+        ? "Home Address"
+        : getStartMode() === "first"
+        ? "First Selected Address"
+        : "Custom Address";
 
     els.routeOutput.innerHTML = `
       <div class="route-step">
         <div class="route-step-top">
           <div class="route-number">Start</div>
-          <div class="lead-badge">Home Base</div>
+          <div class="lead-badge">${escapeHtml(startLabel)}</div>
         </div>
         <div class="route-step-address">${escapeHtml(startAddress)}</div>
         <div class="route-step-meta">Starting point for this route</div>
@@ -786,14 +830,9 @@ const DISPATCH_CONFIG = {
 
               <div class="route-step-address">${escapeHtml(address)}</div>
               <div class="route-step-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-            preferredTime
-          )} • Score ${escapeHtml(String(score))}
-                ${
-                  groupedCount > 1
-                    ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop`
-                    : ""
-                }
+                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${escapeHtml(
+                  String(score)
+                )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop` : ""}
               </div>
             </div>
           `;
@@ -896,8 +935,8 @@ const DISPATCH_CONFIG = {
       return;
     }
 
+    const startLocation = await resolveStartLocation();
     const routeId = `route_${Date.now()}`;
-    const startAddress = getStartAddress();
 
     try {
       await assignRoute(smarterRoute, routeId);
@@ -909,11 +948,16 @@ const DISPATCH_CONFIG = {
           : `Route ${new Date().toLocaleTimeString()}`,
         createdAt: new Date().toISOString(),
         type: emergencyOnly ? "emergency" : "standard",
-        startAddress,
+        startAddress: startLocation.address,
+        startLat: startLocation.lat,
+        startLng: startLocation.lng,
+        startSource: startLocation.source,
         stops: smarterRoute,
       };
 
-      saveRoute(routeData);
+      const routes = getRoutes();
+      setRoutes([...routes, routeData]);
+      setActiveRouteId(routeData.id);
 
       state.optimizedRoute = smarterRoute;
       renderRoute(smarterRoute);
@@ -926,7 +970,7 @@ const DISPATCH_CONFIG = {
     } catch (error) {
       console.error("Failed to optimize route:", error);
       removeRouteFromStorage(routeId);
-      setError("Could not create route. Check backend route endpoints and try again.");
+      setError("Could not create route. Please try again.");
       setStatus("Route creation failed.");
     }
   }
