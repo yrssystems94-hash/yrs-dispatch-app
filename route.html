@@ -155,35 +155,6 @@
       color: white;
     }
 
-    .route-meta-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 14px;
-    }
-
-    .meta-card {
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      background: #fff;
-      padding: 12px;
-    }
-
-    .meta-label {
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 6px;
-    }
-
-    .meta-value {
-      font-size: 15px;
-      font-weight: 800;
-      line-height: 1.35;
-    }
-
     .route-selector-wrap {
       display: flex;
       flex-direction: column;
@@ -208,6 +179,34 @@
       font-size: 14px;
       font-weight: 700;
       color: var(--text);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .meta-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .meta-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+
+    .meta-value {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.35;
     }
 
     .map-shell {
@@ -436,7 +435,7 @@
     @media (max-width: 640px) {
       .actions,
       .stop-actions,
-      .route-meta-grid {
+      .summary-grid {
         grid-template-columns: 1fr;
       }
 
@@ -473,27 +472,16 @@
           <button id="refreshRouteBtn" class="btn btn-success" type="button">Refresh Route Screen</button>
         </div>
 
-        <div class="route-meta-grid">
-          <div class="meta-card">
-            <div class="meta-label">Route Label</div>
-            <div id="routeLabelValue" class="meta-value">—</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Starting Point</div>
-            <div id="startAddressValue" class="meta-value">—</div>
-          </div>
-        </div>
-
         <div id="routeStats" class="stats-row"></div>
       </div>
 
       <div class="panel">
         <div class="panel-title">Route Summary</div>
         <div class="panel-subtitle">
-          A polished mini route planner view for the local area, driven by your actual stop coordinates and order.
+          Clean summary only — route value block removed from above the action buttons.
         </div>
 
-        <div class="route-meta-grid">
+        <div class="summary-grid">
           <div class="meta-card">
             <div class="meta-label">Stops</div>
             <div id="stopCountValue" class="meta-value">0</div>
@@ -517,7 +505,7 @@
     <div class="panel">
       <div class="panel-title">Local Route Map</div>
       <div class="panel-subtitle">
-        Numbered stop pins and route line centered on your real job area. Tap a stop below to focus the matching pin.
+        Numbered stop pins and route line centered on your selected start area when available.
       </div>
 
       <div class="map-shell">
