@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YRS Dispatch</title>
+  <link rel="icon" href="/favicon.ico" />
+
   <style>
     :root {
       --bg: #f4f6f8;
@@ -23,9 +25,7 @@
       --section-bg: #f8fbff;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -40,9 +40,7 @@
       padding: 16px;
     }
 
-    .header {
-      margin-bottom: 16px;
-    }
+    .header { margin-bottom: 16px; }
 
     .eyebrow {
       font-size: 12px;
@@ -79,10 +77,7 @@
       white-space: nowrap;
     }
 
-    .refresh-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
+    .refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
     .status-bar {
       margin-top: 8px;
@@ -159,15 +154,7 @@
       color: white;
     }
 
-    .route-build-panel {
-      background: var(--card);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 14px;
-      border: 1px solid var(--border);
-      margin-bottom: 16px;
-    }
-
+    .route-build-panel,
     .panel {
       background: var(--card);
       border-radius: 20px;
@@ -230,18 +217,20 @@
       font-weight: 700;
     }
 
-    .optimize-wrap {
+    .actions-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 10px;
       margin-bottom: 8px;
     }
 
-    .optimize-btn {
+    .optimize-btn,
+    .secondary-btn,
+    .danger-btn,
+    .resume-btn {
       width: 100%;
       border: none;
       border-radius: 14px;
-      background: #000;
       color: white;
       padding: 15px 14px;
       font-size: 14px;
@@ -251,13 +240,18 @@
       min-height: 50px;
     }
 
-    .optimize-btn:disabled {
+    .optimize-btn { background: #000; }
+    .optimize-btn.emergency { background: var(--urgent); }
+    .secondary-btn { background: var(--dark); }
+    .danger-btn { background: var(--urgent); }
+    .resume-btn { background: var(--success); }
+
+    .optimize-btn:disabled,
+    .secondary-btn:disabled,
+    .danger-btn:disabled,
+    .resume-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
-    }
-
-    .optimize-btn.emergency {
-      background: var(--urgent);
     }
 
     .selection-note {
@@ -270,20 +264,6 @@
 
     .resume-wrap {
       margin-top: 10px;
-    }
-
-    .resume-btn {
-      width: 100%;
-      border: none;
-      border-radius: 14px;
-      background: var(--success);
-      color: white;
-      padding: 13px;
-      font-size: 14px;
-      font-weight: 800;
-      box-shadow: var(--shadow);
-      cursor: pointer;
-      min-height: 46px;
     }
 
     .grouped-leads {
@@ -392,9 +372,7 @@
       background: var(--unrouted);
     }
 
-    .lead-badge.urgent {
-      background: var(--urgent);
-    }
+    .lead-badge.urgent { background: var(--urgent); }
 
     .lead-address {
       font-size: 13px;
@@ -462,20 +440,9 @@
       min-height: 42px;
     }
 
-    .call-btn {
-      background: var(--success);
-      color: white;
-    }
-
-    .map-btn {
-      background: var(--today);
-      color: white;
-    }
-
-    .delete-btn {
-      background: var(--urgent);
-      color: white;
-    }
+    .call-btn { background: var(--success); color: white; }
+    .map-btn { background: var(--today); color: white; }
+    .delete-btn { background: var(--urgent); color: white; }
 
     .route-output {
       display: flex;
@@ -518,15 +485,9 @@
       line-height: 1.4;
     }
 
-    .empty-state {
-      padding: 22px 12px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
+    .empty-state,
     .loading {
-      padding: 18px 12px;
+      padding: 22px 12px;
       text-align: center;
       color: var(--muted);
       font-size: 14px;
@@ -549,29 +510,19 @@
         flex-direction: column;
       }
 
-      .refresh-btn {
-        width: 100%;
-      }
+      .refresh-btn { width: 100%; }
 
       .filters-grid,
       .route-build-grid,
-      .optimize-wrap,
+      .actions-grid,
       .lead-meta,
       .lead-actions {
         grid-template-columns: 1fr;
       }
 
-      .controls {
-        flex-direction: column;
-      }
-
-      .day-section {
-        padding: 10px;
-      }
-
-      .lead-card {
-        padding: 10px;
-      }
+      .controls { flex-direction: column; }
+      .day-section { padding: 10px; }
+      .lead-card { padding: 10px; }
     }
   </style>
 </head>
@@ -621,7 +572,7 @@
       <div class="panel-header">
         <div>
           <div class="panel-title">Build Route</div>
-          <div class="panel-subtitle">Choose a start point and end mode, then optimize your route.</div>
+          <div class="panel-subtitle">Choose a start point, end mode, and planned day. You can keep up to 5 routes ready.</div>
         </div>
       </div>
 
@@ -637,13 +588,7 @@
 
         <div class="field-wrap">
           <label for="customStartInput" class="field-label">Custom Address</label>
-          <input
-            id="customStartInput"
-            class="field-input"
-            type="text"
-            placeholder="Enter a custom start address"
-            hidden
-          />
+          <input id="customStartInput" class="field-input" type="text" placeholder="Enter a custom start address" hidden />
         </div>
 
         <div class="field-wrap">
@@ -653,17 +598,23 @@
             <option value="round_trip">Round Trip</option>
           </select>
         </div>
+
+        <div class="field-wrap">
+          <label for="routeDaySelect" class="field-label">Planned Day</label>
+          <select id="routeDaySelect" class="field-select"></select>
+        </div>
       </div>
 
-      <div class="optimize-wrap">
+      <div class="actions-grid">
         <button id="optimizeBtn" class="optimize-btn" type="button">Optimize Route</button>
         <button id="emergencyOptimizeBtn" class="optimize-btn emergency" type="button">Emergency Optimize</button>
+        <button id="batchDeleteBtn" class="danger-btn" type="button">Delete Selected</button>
       </div>
 
       <div id="selectionNote" class="selection-note">Select jobs first, then optimize your route.</div>
 
       <div class="resume-wrap">
-        <button id="resumeRouteBtn" class="resume-btn" type="button" hidden>Resume Current Route</button>
+        <button id="resumeRouteBtn" class="resume-btn" type="button" hidden>Resume / View Planned Routes</button>
       </div>
     </div>
 
@@ -671,7 +622,7 @@
       <div class="panel-header">
         <div>
           <div class="panel-title">Optimized Route Preview</div>
-          <div class="panel-subtitle">Hybrid logic: urgency → overdue → preferred time → grouped stops</div>
+          <div class="panel-subtitle">Normal planning keeps your incoming lead order respected. Emergency Optimize is for urgent jobs.</div>
         </div>
       </div>
 
