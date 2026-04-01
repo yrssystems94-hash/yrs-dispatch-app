@@ -568,7 +568,7 @@
       <div class="panel-header">
         <div>
           <div class="panel-title">Build Route</div>
-          <div class="panel-subtitle">Choose a start point, select jobs, then optimize the route.</div>
+          <div class="panel-subtitle">Choose a start point and end mode, then optimize your route.</div>
         </div>
       </div>
 
@@ -591,6 +591,14 @@
             placeholder="Enter a custom start address"
             hidden
           />
+        </div>
+
+        <div class="field-wrap">
+          <label for="endModeSelect" class="field-label">Ending Mode</label>
+          <select id="endModeSelect" class="field-select">
+            <option value="last">Last Location</option>
+            <option value="round_trip">Round Trip</option>
+          </select>
         </div>
       </div>
 
