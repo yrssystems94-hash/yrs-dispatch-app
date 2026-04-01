@@ -11,6 +11,7 @@ const DISPATCH_CONFIG = {
 
   routesStorageKey: "yrs_routes",
   activeRouteIdStorageKey: "yrs_active_route_id",
+  maxSavedRoutes: 5,
 };
 
 (function () {
@@ -20,10 +21,12 @@ const DISPATCH_CONFIG = {
     clearFilterBtn: document.getElementById("clearFilterBtn"),
     optimizeBtn: document.getElementById("optimizeBtn"),
     emergencyOptimizeBtn: document.getElementById("emergencyOptimizeBtn"),
+    batchDeleteBtn: document.getElementById("batchDeleteBtn"),
     resumeRouteBtn: document.getElementById("resumeRouteBtn"),
     startModeSelect: document.getElementById("startModeSelect"),
     customStartInput: document.getElementById("customStartInput"),
     endModeSelect: document.getElementById("endModeSelect"),
+    routeDaySelect: document.getElementById("routeDaySelect"),
     statusBar: document.getElementById("statusBar"),
     panelTitle: document.getElementById("panelTitle"),
     panelSubtitle: document.getElementById("panelSubtitle"),
@@ -106,8 +109,8 @@ const DISPATCH_CONFIG = {
       normalizeString(lead?.submitted_at) ||
       normalizeString(lead?.received_at) ||
       "";
-    if (!raw) return null;
 
+    if (!raw) return null;
     const parsed = new Date(raw);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
@@ -143,16 +146,35 @@ const DISPATCH_CONFIG = {
     });
   }
 
+  function buildRouteDayOptions() {
+    if (!els.routeDaySelect) return;
+
+    const options = [];
+    for (let i = 0; i < 5; i += 1) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const value = date.toISOString().slice(0, 10);
+      const label =
+        i === 0
+          ? `Today - ${date.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" })}`
+          : date.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" });
+
+      options.push(`<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`);
+    }
+
+    els.routeDaySelect.innerHTML = options.join("");
+  }
+
   function sortLeadsByReceivedFirst(leads) {
     return [...(Array.isArray(leads) ? leads : [])].sort((a, b) => {
-      const dateA = getLeadTimestamp(a);
-      const dateB = getLeadTimestamp(b);
+      const aDate = getLeadTimestamp(a);
+      const bDate = getLeadTimestamp(b);
 
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
 
-      return dateA.getTime() - dateB.getTime();
+      return aDate.getTime() - bDate.getTime();
     });
   }
 
@@ -162,9 +184,7 @@ const DISPATCH_CONFIG = {
 
     sorted.forEach((lead) => {
       const dayKey = getLeadDayKey(lead);
-      if (!groups.has(dayKey)) {
-        groups.set(dayKey, []);
-      }
+      if (!groups.has(dayKey)) groups.set(dayKey, []);
       groups.get(dayKey).push(lead);
     });
 
@@ -253,6 +273,10 @@ const DISPATCH_CONFIG = {
 
   function getEndMode() {
     return normalizeString(els.endModeSelect?.value) || "last";
+  }
+
+  function getPlannedDay() {
+    return normalizeString(els.routeDaySelect?.value) || new Date().toISOString().slice(0, 10);
   }
 
   function getHomeStartCoords() {
@@ -360,21 +384,15 @@ const DISPATCH_CONFIG = {
   function setLoadingButtons() {
     const busy = state.isLoadingCounts || state.isLoadingLeads;
 
-    if (els.refreshBtn) {
-      els.refreshBtn.disabled = busy;
-      els.refreshBtn.textContent = busy ? "Loading..." : "Refresh";
-    }
+    [els.refreshBtn, els.optimizeBtn, els.emergencyOptimizeBtn, els.batchDeleteBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = busy;
+    });
 
-    if (els.optimizeBtn) {
-      els.optimizeBtn.disabled = state.isLoadingLeads;
-      els.optimizeBtn.textContent = state.isLoadingLeads ? "Loading..." : "Optimize Route";
-    }
-
-    if (els.emergencyOptimizeBtn) {
-      els.emergencyOptimizeBtn.disabled = state.isLoadingLeads;
-      els.emergencyOptimizeBtn.textContent =
-        state.isLoadingLeads ? "Loading..." : "Emergency Optimize";
-    }
+    if (els.refreshBtn) els.refreshBtn.textContent = busy ? "Loading..." : "Refresh";
+    if (els.optimizeBtn) els.optimizeBtn.textContent = busy ? "Loading..." : "Optimize Route";
+    if (els.emergencyOptimizeBtn) els.emergencyOptimizeBtn.textContent = busy ? "Loading..." : "Emergency Optimize";
+    if (els.batchDeleteBtn) els.batchDeleteBtn.textContent = busy ? "Loading..." : "Delete Selected";
   }
 
   function getFilterQuery(filterKey) {
@@ -431,21 +449,10 @@ const DISPATCH_CONFIG = {
       card.style.outlineOffset = isActive ? "2px" : "0";
     });
 
-    if (els.showAllBtn) {
-      els.showAllBtn.classList.toggle("active", !state.activeFilter);
-    }
-
-    if (els.clearFilterBtn) {
-      els.clearFilterBtn.classList.toggle("active", Boolean(state.activeFilter));
-    }
-
-    if (els.panelTitle) {
-      els.panelTitle.textContent = getFilterTitle(state.activeFilter);
-    }
-
-    if (els.panelSubtitle) {
-      els.panelSubtitle.textContent = getFilterSubtitle(state.activeFilter);
-    }
+    if (els.showAllBtn) els.showAllBtn.classList.toggle("active", !state.activeFilter);
+    if (els.clearFilterBtn) els.clearFilterBtn.classList.toggle("active", Boolean(state.activeFilter));
+    if (els.panelTitle) els.panelTitle.textContent = getFilterTitle(state.activeFilter);
+    if (els.panelSubtitle) els.panelSubtitle.textContent = getFilterSubtitle(state.activeFilter);
   }
 
   async function fetchJson(path) {
@@ -455,12 +462,9 @@ const DISPATCH_CONFIG = {
       cache: "no-store",
     });
 
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 
     const json = await response.json();
-
     if (!json || json.success !== true) {
       throw new Error(json?.error || "Request did not return success");
     }
@@ -508,12 +512,12 @@ const DISPATCH_CONFIG = {
     if (count === 0) {
       els.selectionNote.textContent =
         routesCount > 0
-          ? `Select jobs first, then optimize your route. You currently have ${routesCount} saved route${routesCount === 1 ? "" : "s"}.`
+          ? `Select jobs first, then optimize your route. You currently have ${routesCount} planned route${routesCount === 1 ? "" : "s"} saved.`
           : "Select jobs first, then optimize your route.";
       return;
     }
 
-    els.selectionNote.textContent = `${count} job${count === 1 ? "" : "s"} selected for routing.`;
+    els.selectionNote.textContent = `${count} job${count === 1 ? "" : "s"} selected.`;
   }
 
   function isSelectedLead(lead) {
@@ -546,10 +550,7 @@ const DISPATCH_CONFIG = {
 
     const routeStatus = normalizeString(lead?.route_status).toLowerCase();
     const status = normalizeString(lead?.status).toLowerCase();
-
-    if (routeStatus === "done" || status === "completed") {
-      return false;
-    }
+    if (routeStatus === "done" || status === "completed") return false;
 
     const ageMs = Date.now() - parsed.getTime();
     return ageMs >= 48 * 60 * 60 * 1000;
@@ -557,7 +558,6 @@ const DISPATCH_CONFIG = {
 
   function getPreferredTimeWeight(lead) {
     const preferredTime = normalizeString(lead?.preferred_time).toLowerCase();
-
     if (preferredTime.includes("morning")) return 20;
     if (preferredTime.includes("afternoon")) return 10;
     if (preferredTime.includes("anytime")) return 5;
@@ -566,7 +566,6 @@ const DISPATCH_CONFIG = {
 
   function getCityClusterWeight(lead) {
     const city = normalizeString(lead?.city).toLowerCase();
-
     if (city.includes("kitchener")) return 15;
     if (city.includes("waterloo")) return 12;
     if (city.includes("cambridge")) return 10;
@@ -591,9 +590,7 @@ const DISPATCH_CONFIG = {
     const routeStatus = normalizeString(lead?.route_status) || "unrouted";
 
     if (priority.toLowerCase().includes("urgent")) return "Urgent";
-    if (normalizeString(lead?.service_type).toLowerCase().includes("emergency")) {
-      return "Emergency";
-    }
+    if (normalizeString(lead?.service_type).toLowerCase().includes("emergency")) return "Emergency";
 
     return routeStatus;
   }
@@ -637,14 +634,8 @@ const DISPATCH_CONFIG = {
     const groups = new Map();
 
     (Array.isArray(leads) ? leads : []).forEach((lead) => {
-      const key = `${normalizeString(lead?.city).toLowerCase()}::${normalizeAddress(
-        getLeadAddress(lead)
-      )}`;
-
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-
+      const key = `${normalizeString(lead?.city).toLowerCase()}::${normalizeAddress(getLeadAddress(lead))}`;
+      if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(lead);
     });
 
@@ -655,18 +646,15 @@ const DISPATCH_CONFIG = {
     return [...leadGroups].sort((groupA, groupB) => {
       const bestA = Math.max(...groupA.map(getHybridScore));
       const bestB = Math.max(...groupB.map(getHybridScore));
-
       if (bestB !== bestA) return bestB - bestA;
 
       const cityA = normalizeString(groupA[0]?.city).toLowerCase();
       const cityB = normalizeString(groupB[0]?.city).toLowerCase();
-
       if (cityA < cityB) return -1;
       if (cityA > cityB) return 1;
 
       const addressA = normalizeAddress(getLeadAddress(groupA[0]));
       const addressB = normalizeAddress(getLeadAddress(groupB[0]));
-
       if (addressA < addressB) return -1;
       if (addressA > addressB) return 1;
 
@@ -698,7 +686,7 @@ const DISPATCH_CONFIG = {
     if (state.selectedLeadIds.includes(leadId)) {
       state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
     } else {
-      state.selectedLeadIds = dedupeSelectedLeadIds([...state.selectedLeadIds, leadId]);
+      state.selectedLeadIds = [...state.selectedLeadIds, leadId];
     }
 
     updateSelectionNote();
@@ -723,9 +711,7 @@ const DISPATCH_CONFIG = {
     const score = getHybridScore(lead);
 
     return `
-      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(
-        getLeadId(lead)
-      )}">
+      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(getLeadId(lead))}">
         <div class="lead-select-row">
           <div class="lead-select-label">Tap to select</div>
           <input class="lead-checkbox" type="checkbox" ${selected ? "checked" : ""} tabindex="-1" aria-hidden="true" />
@@ -766,9 +752,7 @@ const DISPATCH_CONFIG = {
         <div class="lead-actions">
           <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(phone)}">Call</button>
           <button class="action-btn map-btn" type="button" data-address="${escapeHtml(address)}">Map</button>
-          <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(
-            getLeadId(lead)
-          )}">Delete</button>
+          <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(getLeadId(lead))}">Delete</button>
         </div>
       </div>
     `;
@@ -785,21 +769,17 @@ const DISPATCH_CONFIG = {
     const grouped = groupLeadsByReceivedDay(leads);
 
     els.leadList.innerHTML = grouped
-      .map((group) => {
-        return `
-          <section class="day-section">
-            <div class="day-section-header">
-              <div class="day-title">${escapeHtml(group.dayLabel)}</div>
-              <div class="day-count">${escapeHtml(String(group.items.length))} lead${
-          group.items.length === 1 ? "" : "s"
-        }</div>
-            </div>
-            <div class="lead-list">
-              ${group.items.map(buildLeadCardHtml).join("")}
-            </div>
-          </section>
-        `;
-      })
+      .map((group) => `
+        <section class="day-section">
+          <div class="day-section-header">
+            <div class="day-title">${escapeHtml(group.dayLabel)}</div>
+            <div class="day-count">${escapeHtml(String(group.items.length))} lead${group.items.length === 1 ? "" : "s"}</div>
+          </div>
+          <div class="lead-list">
+            ${group.items.map(buildLeadCardHtml).join("")}
+          </div>
+        </section>
+      `)
       .join("");
 
     Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach((card) => {
@@ -816,7 +796,7 @@ const DISPATCH_CONFIG = {
         event.stopPropagation();
         const phone = normalizeString(btn.getAttribute("data-phone"));
         if (!phone) {
-          alert("No phone number available for this lead.");
+          window.alert("No phone number available for this lead.");
           return;
         }
         window.location.href = `tel:${phone}`;
@@ -828,7 +808,7 @@ const DISPATCH_CONFIG = {
         event.stopPropagation();
         const address = normalizeString(btn.getAttribute("data-address"));
         if (!address) {
-          alert("No address available for this lead.");
+          window.alert("No address available for this lead.");
           return;
         }
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -852,7 +832,7 @@ const DISPATCH_CONFIG = {
           setStatus("Lead deleted.");
         } catch (error) {
           console.error("Delete failed:", error);
-          setError("Could not delete lead.");
+          setError("Could not delete lead. If it reappears after refresh, the backend delete endpoint still needs fixing.");
           setStatus("Delete failed.");
         }
       });
@@ -867,6 +847,7 @@ const DISPATCH_CONFIG = {
 
     const startAddress = getStartAddress();
     const endMode = getEndMode();
+    const plannedDay = getPlannedDay();
 
     const startLabel =
       getStartMode() === "home"
@@ -878,6 +859,15 @@ const DISPATCH_CONFIG = {
     const endLabel = endMode === "round_trip" ? "Round Trip" : "Last Location";
 
     els.routeOutput.innerHTML = `
+      <div class="route-step">
+        <div class="route-step-top">
+          <div class="route-number">Plan</div>
+          <div class="lead-badge">${escapeHtml(plannedDay)}</div>
+        </div>
+        <div class="route-step-address">Planned route day: ${escapeHtml(plannedDay)}</div>
+        <div class="route-step-meta">You can keep up to ${DISPATCH_CONFIG.maxSavedRoutes} planned routes saved.</div>
+      </div>
+
       <div class="route-step">
         <div class="route-step-top">
           <div class="route-number">Start</div>
@@ -907,9 +897,7 @@ const DISPATCH_CONFIG = {
 
               <div class="route-step-address">${escapeHtml(address)}</div>
               <div class="route-step-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-            preferredTime
-          )} • Score ${escapeHtml(String(score))}${
+                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${escapeHtml(String(score))}${
             groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop` : ""
           }
               </div>
@@ -980,8 +968,7 @@ const DISPATCH_CONFIG = {
       const path = query ? `/api/leads-db?${query}` : "/api/leads-db";
       const result = await fetchJson(path);
 
-      state.allLeads = filterOutRoutedLeads(result.leads);
-      state.selectedLeadIds = dedupeSelectedLeadIds(state.selectedLeadIds);
+      state.allLeads = sortLeadsByReceivedFirst(filterOutRoutedLeads(result.leads));
       renderLeads(state.allLeads);
 
       const count = state.allLeads.length;
@@ -998,12 +985,25 @@ const DISPATCH_CONFIG = {
     }
   }
 
-  async function assignRoute(routeLeads, routeId) {
+  async function assignRoute(routeLeads, routeId, assignedDay) {
     await postJson("/api/route/assign", {
       lead_ids: routeLeads.map(getLeadId).filter(Boolean),
       route_id: routeId,
-      assigned_day: new Date().toISOString().slice(0, 10),
+      assigned_day: assignedDay,
     });
+  }
+
+  function makeRouteLabel(assignedDay, emergencyOnly) {
+    const date = new Date(`${assignedDay}T00:00:00`);
+    const prettyDay = Number.isNaN(date.getTime())
+      ? assignedDay
+      : date.toLocaleDateString("en-CA", {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+        });
+
+    return emergencyOnly ? `Emergency Route - ${prettyDay}` : `Route - ${prettyDay}`;
   }
 
   async function createAndOpenRoute(emergencyOnly) {
@@ -1015,6 +1015,12 @@ const DISPATCH_CONFIG = {
       state.optimizedRoute = [];
       renderRoute([]);
       setStatus("No jobs selected. Tap leads first, then optimize.");
+      return;
+    }
+
+    const currentRoutes = getRoutes();
+    if (currentRoutes.length >= DISPATCH_CONFIG.maxSavedRoutes) {
+      window.alert(`You can only keep ${DISPATCH_CONFIG.maxSavedRoutes} planned routes at a time. Delete one first.`);
       return;
     }
 
@@ -1033,18 +1039,18 @@ const DISPATCH_CONFIG = {
 
     const startLocation = await resolveStartLocation();
     const endMode = getEndMode();
+    const assignedDay = getPlannedDay();
     const routeId = `route_${Date.now()}`;
 
     try {
-      await assignRoute(smarterRoute, routeId);
+      await assignRoute(smarterRoute, routeId, assignedDay);
 
       const routeData = {
         id: routeId,
-        label: emergencyOnly
-          ? `Emergency Route ${new Date().toLocaleTimeString()}`
-          : `Route ${new Date().toLocaleTimeString()}`,
+        label: makeRouteLabel(assignedDay, emergencyOnly),
         createdAt: new Date().toISOString(),
         type: emergencyOnly ? "emergency" : "standard",
+        assignedDay,
         startAddress: startLocation.address,
         startLat: startLocation.lat,
         startLng: startLocation.lng,
@@ -1087,9 +1093,30 @@ const DISPATCH_CONFIG = {
       return;
     }
 
-    const emergencyLeadIds = emergencyLeads.map(getLeadId).filter(Boolean);
-    state.selectedLeadIds = dedupeSelectedLeadIds(emergencyLeadIds);
+    state.selectedLeadIds = emergencyLeads.map(getLeadId).filter(Boolean);
     await createAndOpenRoute(true);
+  }
+
+  async function batchDeleteSelected() {
+    const ids = [...state.selectedLeadIds];
+    if (!ids.length) {
+      window.alert("Select leads first.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"} permanently?`);
+    if (!confirmed) return;
+
+    try {
+      await postJson("/api/delete-leads", { leadIds: ids });
+      state.selectedLeadIds = [];
+      await handleRefresh();
+      setStatus("Selected leads deleted.");
+    } catch (error) {
+      console.error("Batch delete failed:", error);
+      setError("Could not delete selected leads. If they return after refresh, the backend delete endpoint still needs fixing.");
+      setStatus("Batch delete failed.");
+    }
   }
 
   async function handleRefresh() {
@@ -1097,42 +1124,17 @@ const DISPATCH_CONFIG = {
   }
 
   function bindEvents() {
-    if (els.refreshBtn) {
-      els.refreshBtn.addEventListener("click", handleRefresh);
-    }
-
-    if (els.showAllBtn) {
-      els.showAllBtn.addEventListener("click", function () {
-        loadLeadView(null);
-      });
-    }
-
-    if (els.clearFilterBtn) {
-      els.clearFilterBtn.addEventListener("click", function () {
-        loadLeadView(null);
-      });
-    }
-
-    if (els.optimizeBtn) {
-      els.optimizeBtn.addEventListener("click", optimizeRoute);
-    }
-
-    if (els.emergencyOptimizeBtn) {
-      els.emergencyOptimizeBtn.addEventListener("click", emergencyOptimizeRoute);
-    }
-
-    if (els.resumeRouteBtn) {
-      els.resumeRouteBtn.addEventListener("click", function () {
-        window.location.href = "./route.html";
-      });
-    }
-
-    if (els.startModeSelect) {
-      els.startModeSelect.addEventListener("change", updateStartInputUi);
-    }
+    if (els.refreshBtn) els.refreshBtn.addEventListener("click", handleRefresh);
+    if (els.showAllBtn) els.showAllBtn.addEventListener("click", () => loadLeadView(null));
+    if (els.clearFilterBtn) els.clearFilterBtn.addEventListener("click", () => loadLeadView(null));
+    if (els.optimizeBtn) els.optimizeBtn.addEventListener("click", optimizeRoute);
+    if (els.emergencyOptimizeBtn) els.emergencyOptimizeBtn.addEventListener("click", emergencyOptimizeRoute);
+    if (els.batchDeleteBtn) els.batchDeleteBtn.addEventListener("click", batchDeleteSelected);
+    if (els.resumeRouteBtn) els.resumeRouteBtn.addEventListener("click", () => { window.location.href = "./route.html"; });
+    if (els.startModeSelect) els.startModeSelect.addEventListener("change", updateStartInputUi);
 
     els.filterCards.forEach((card) => {
-      card.addEventListener("click", function () {
+      card.addEventListener("click", () => {
         const filterKey = normalizeString(card.dataset.filter);
         loadLeadView(filterKey);
       });
@@ -1141,6 +1143,7 @@ const DISPATCH_CONFIG = {
 
   async function init() {
     bindEvents();
+    buildRouteDayOptions();
     setActiveFilterUi(null);
     updateSelectionNote();
     updateStartInputUi();
