@@ -95,10 +95,7 @@ const ROUTE_CONFIG = {
     const activeRouteId = getActiveRouteId();
     const routes = getRoutes();
 
-    if (!activeRouteId) {
-      return routes.length ? routes[routes.length - 1] : null;
-    }
-
+    if (!activeRouteId) return routes.length ? routes[routes.length - 1] : null;
     return routes.find((route) => normalizeString(route.id) === activeRouteId) || null;
   }
 
@@ -191,9 +188,7 @@ const ROUTE_CONFIG = {
     const priority = normalizeString(lead?.priority).toLowerCase();
     const serviceType = normalizeString(lead?.service_type).toLowerCase();
 
-    if (routeStatus === "done" || routeStatus === "arrived") {
-      return false;
-    }
+    if (routeStatus === "done" || routeStatus === "arrived") return false;
 
     return (
       priority.includes("urgent") ||
@@ -211,16 +206,13 @@ const ROUTE_CONFIG = {
     if (routeStatus === "done") return "Done";
     if (routeStatus === "arrived") return "Arrived";
     if (priority.includes("urgent")) return "Urgent";
-    if (serviceType.includes("emergency") || serviceType.includes("leak")) {
-      return "Emergency";
-    }
+    if (serviceType.includes("emergency") || serviceType.includes("leak")) return "Emergency";
 
     return "Routed";
   }
 
   function getBadgeClass(lead) {
     const badge = getBadgeText(lead).toLowerCase();
-
     if (badge === "urgent" || badge === "emergency") return "urgent";
     if (badge === "done") return "done";
     if (badge === "arrived") return "arrived";
@@ -307,17 +299,9 @@ const ROUTE_CONFIG = {
       `;
     }
 
-    if (els.stopsList) {
-      els.stopsList.innerHTML = "";
-    }
-
-    if (els.openFullRouteBtn) {
-      els.openFullRouteBtn.disabled = true;
-    }
-
-    if (els.deleteRouteBtn) {
-      els.deleteRouteBtn.disabled = true;
-    }
+    if (els.stopsList) els.stopsList.innerHTML = "";
+    if (els.openFullRouteBtn) els.openFullRouteBtn.disabled = true;
+    if (els.deleteRouteBtn) els.deleteRouteBtn.disabled = true;
 
     if (els.routeSelector) {
       els.routeSelector.innerHTML = `<option value="">No routes</option>`;
@@ -329,10 +313,7 @@ const ROUTE_CONFIG = {
     if (els.doneCountValue) els.doneCountValue.textContent = "0";
     if (els.routeTypeValue) els.routeTypeValue.textContent = "Standard";
     if (els.routeStats) els.routeStats.innerHTML = "";
-    if (els.mapNote) {
-      els.mapNote.textContent =
-        "No route is loaded yet. Build one from the dispatch dashboard.";
-    }
+    if (els.mapNote) els.mapNote.textContent = "No route is loaded yet. Build one from the dispatch dashboard.";
 
     destroyMap();
     setStatus("No active route loaded.");
@@ -448,6 +429,7 @@ const ROUTE_CONFIG = {
           normalizeString(route.id) === normalizeString(activeRouteId)
             ? "selected"
             : "";
+
         return `<option value="${escapeHtml(route.id)}" ${selected}>${escapeHtml(label)}</option>`;
       })
       .join("");
@@ -462,6 +444,7 @@ const ROUTE_CONFIG = {
     const groupedCount = stops.filter((stop) => Number(stop?.grouped_count || 1) > 1).length;
     const routeType = normalizeString(route?.type || "standard");
     const endMode = normalizeString(route?.endMode || "last");
+    const assignedDay = normalizeString(route?.assignedDay || "");
     const cityList = Array.from(
       new Set(stops.map((stop) => normalizeString(stop?.city)).filter(Boolean))
     );
@@ -469,12 +452,11 @@ const ROUTE_CONFIG = {
     if (els.stopCountValue) els.stopCountValue.textContent = String(stops.length);
     if (els.urgentCountValue) els.urgentCountValue.textContent = String(urgentCount);
     if (els.doneCountValue) els.doneCountValue.textContent = String(doneCount);
-    if (els.routeTypeValue) {
-      els.routeTypeValue.textContent = routeType === "emergency" ? "Emergency" : "Standard";
-    }
+    if (els.routeTypeValue) els.routeTypeValue.textContent = routeType === "emergency" ? "Emergency" : "Standard";
 
     if (els.routeStats) {
       const chips = [
+        assignedDay || null,
         `${stops.length} Stop${stops.length === 1 ? "" : "s"}`,
         `${urgentCount} Urgent`,
         `${doneCount} Done`,
@@ -499,10 +481,7 @@ const ROUTE_CONFIG = {
 
     markersByStopIndex = new Map();
 
-    if (markerLayer) {
-      markerLayer.clearLayers();
-    }
-
+    if (markerLayer) markerLayer.clearLayers();
     if (routePolyline) {
       routePolyline.remove();
       routePolyline = null;
@@ -533,18 +512,15 @@ const ROUTE_CONFIG = {
 
       const lat = getLat(lead);
       const lng = getLng(lead);
-
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       const marker = L.marker([lat, lng], {
         icon: createStopIcon(index, lead),
-      }).bindPopup(
-        `
-          <strong>Stop ${index + 1}</strong><br>
-          ${escapeHtml(getLeadAddress(lead))}<br>
-          ${escapeHtml(formatDisplay(lead?.service_type))} • ${escapeHtml(getBadgeText(lead))}
-        `
-      );
+      }).bindPopup(`
+        <strong>Stop ${index + 1}</strong><br>
+        ${escapeHtml(getLeadAddress(lead))}<br>
+        ${escapeHtml(formatDisplay(lead?.service_type))} • ${escapeHtml(getBadgeText(lead))}
+      `);
 
       marker.on("click", function () {
         focusStopByIndex(index);
@@ -569,8 +545,7 @@ const ROUTE_CONFIG = {
       }
 
       if (els.mapNote) {
-        els.mapNote.textContent =
-          "No valid map pins available yet because these stops are missing coordinates.";
+        els.mapNote.textContent = "No valid map pins available yet because these stops are missing coordinates.";
       }
       return;
     }
@@ -619,9 +594,7 @@ const ROUTE_CONFIG = {
           ? "Route returns to the start point."
           : "Route ends at the last stop.";
 
-      els.mapNote.textContent = `${linePoints.length} mapped stop${
-        linePoints.length === 1 ? "" : "s"
-      } rendered. ${startSourceText} ${endModeText}`;
+      els.mapNote.textContent = `${linePoints.length} mapped stop${linePoints.length === 1 ? "" : "s"} rendered. ${startSourceText} ${endModeText}`;
     }
   }
 
@@ -630,11 +603,7 @@ const ROUTE_CONFIG = {
 
     if (!stops.length) {
       if (els.stopsList) {
-        els.stopsList.innerHTML = `
-          <div class="empty-state">
-            No stops found for this route.
-          </div>
-        `;
+        els.stopsList.innerHTML = `<div class="empty-state">No stops found for this route.</div>`;
       }
       return;
     }
@@ -666,9 +635,9 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-meta">
-              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-          preferredTime
-        )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
+              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)}${
+          groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""
+        }
             </div>
 
             <div class="stop-meta">
@@ -677,15 +646,9 @@ const ROUTE_CONFIG = {
 
             <div class="stop-actions">
               <button class="btn btn-success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
-              <button class="btn btn-primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${
-          hasMap ? "" : "disabled"
-        }>Map</button>
-              <button class="btn btn-dark" type="button" data-arrived="${escapeHtml(
-                getLeadId(lead)
-              )}">Arrived</button>
-              <button class="btn btn-danger" type="button" data-done="${escapeHtml(
-                getLeadId(lead)
-              )}">Done</button>
+              <button class="btn btn-primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${hasMap ? "" : "disabled"}>Map</button>
+              <button class="btn btn-dark" type="button" data-arrived="${escapeHtml(getLeadId(lead))}">Arrived</button>
+              <button class="btn btn-danger" type="button" data-done="${escapeHtml(getLeadId(lead))}">Done</button>
             </div>
           </div>
         `;
@@ -748,13 +711,8 @@ const ROUTE_CONFIG = {
       return;
     }
 
-    if (els.openFullRouteBtn) {
-      els.openFullRouteBtn.disabled = false;
-    }
-
-    if (els.deleteRouteBtn) {
-      els.deleteRouteBtn.disabled = false;
-    }
+    if (els.openFullRouteBtn) els.openFullRouteBtn.disabled = false;
+    if (els.deleteRouteBtn) els.deleteRouteBtn.disabled = false;
 
     renderRouteSelector();
     renderRouteStats(route);
@@ -776,26 +734,16 @@ const ROUTE_CONFIG = {
 
       const updatedStops = (route.stops || []).map((stop) => {
         if (getLeadId(stop) !== leadId) return stop;
-        return {
-          ...stop,
-          route_status: status,
-        };
+        return { ...stop, route_status: status };
       });
 
       const routes = getRoutes().map((item) => {
         if (normalizeString(item.id) !== normalizeString(route.id)) return item;
-        return {
-          ...item,
-          stops: updatedStops,
-        };
+        return { ...item, stops: updatedStops };
       });
 
       setRoutes(routes);
-      renderRoute({
-        ...route,
-        stops: updatedStops,
-      });
-
+      renderRoute({ ...route, stops: updatedStops });
       setStatus(`Stop updated to ${status}.`);
     } catch (error) {
       console.error("Failed to update stop status:", error);
@@ -813,17 +761,11 @@ const ROUTE_CONFIG = {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Delete this route and return all routed jobs back to the dashboard?"
-    );
-
+    const confirmed = window.confirm("Delete this route and return all routed jobs back to the dashboard?");
     if (!confirmed) return;
 
     try {
-      await postJson("/api/route/delete", {
-        route_id: routeId,
-      });
-
+      await postJson("/api/route/delete", { route_id: routeId });
       removeRouteFromStorage(routeId);
 
       const nextRoute = getActiveRoute();
