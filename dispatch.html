@@ -1,1100 +1,637 @@
-const DISPATCH_CONFIG = {
-  apiBaseUrl:
-    window.location.hostname === "127.0.0.1" ||
-    window.location.hostname === "localhost"
-      ? "http://localhost:4000"
-      : "https://yrs-lead-api.onrender.com",
-
-  defaultStartAddress: "10 Carlyle Pl, Kitchener, ON N2P 1R6",
-
-  // Set this to your real home/base coordinates
-  defaultStartLat: 43.4057,
-  defaultStartLng: -80.4446,
-
-  routesStorageKey: "yrs_routes",
-  activeRouteIdStorageKey: "yrs_active_route_id",
-};
-
-(function () {
-  const els = {
-    refreshBtn: document.getElementById("refreshBtn"),
-    showAllBtn: document.getElementById("showAllBtn"),
-    clearFilterBtn: document.getElementById("clearFilterBtn"),
-    optimizeBtn: document.getElementById("optimizeBtn"),
-    emergencyOptimizeBtn: document.getElementById("emergencyOptimizeBtn"),
-    resumeRouteBtn: document.getElementById("resumeRouteBtn"),
-
-    startModeSelect: document.getElementById("startModeSelect"),
-    customStartInput: document.getElementById("customStartInput"),
-
-    statusBar: document.getElementById("statusBar"),
-    panelTitle: document.getElementById("panelTitle"),
-    panelSubtitle: document.getElementById("panelSubtitle"),
-    leadList: document.getElementById("leadList"),
-    routeOutput: document.getElementById("routeOutput"),
-    errorBox: document.getElementById("errorBox"),
-    selectionNote: document.getElementById("selectionNote"),
-
-    urgentCount: document.getElementById("urgentCount"),
-    todayCount: document.getElementById("todayCount"),
-    overdueCount: document.getElementById("overdueCount"),
-    unroutedCount: document.getElementById("unroutedCount"),
-
-    filterCards: Array.from(document.querySelectorAll("[data-filter]")),
-  };
-
-  const state = {
-    isLoadingCounts: false,
-    isLoadingLeads: false,
-    activeFilter: null,
-    allLeads: [],
-    selectedLeadIds: [],
-    optimizedRoute: [],
-  };
-
-  function normalizeString(value) {
-    return typeof value === "string" ? value.trim() : "";
-  }
-
-  function formatDisplay(value, fallback = "N/A") {
-    const text = normalizeString(String(value || ""));
-    return text || fallback;
-  }
-
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function getApiUrl(path) {
-    return `${DISPATCH_CONFIG.apiBaseUrl}${path}`;
-  }
-
-  function getLeadId(lead) {
-    return normalizeString(lead?.lead_id) || normalizeString(lead?.id);
-  }
-
-  function getLeadAddress(lead) {
-    return (
-      normalizeString(lead?.property_address) ||
-      normalizeString(lead?.full_address) ||
-      [
-        normalizeString(lead?.property_address),
-        normalizeString(lead?.city),
-        normalizeString(lead?.province),
-        normalizeString(lead?.postal_code),
-      ]
-        .filter(Boolean)
-        .join(", ")
-    );
-  }
-
-  function getLeadPhone(lead) {
-    return normalizeString(lead?.phone);
-  }
-
-  function normalizeAddress(address) {
-    return normalizeString(address)
-      .toLowerCase()
-      .replace(/\./g, "")
-      .replace(/,/g, "")
-      .replace(/\s+/g, " ")
-      .replace(/\bstreet\b/g, "st")
-      .replace(/\bavenue\b/g, "ave")
-      .replace(/\broad\b/g, "rd")
-      .replace(/\bdrive\b/g, "dr")
-      .replace(/\blane\b/g, "ln")
-      .replace(/\bcourt\b/g, "crt")
-      .replace(/\bplace\b/g, "pl")
-      .trim();
-  }
-
-  function getRoutes() {
-    try {
-      const raw = window.localStorage.getItem(DISPATCH_CONFIG.routesStorageKey);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function setRoutes(routes) {
-    window.localStorage.setItem(
-      DISPATCH_CONFIG.routesStorageKey,
-      JSON.stringify(Array.isArray(routes) ? routes : [])
-    );
-  }
-
-  function getActiveRouteId() {
-    return normalizeString(
-      window.localStorage.getItem(DISPATCH_CONFIG.activeRouteIdStorageKey)
-    );
-  }
-
-  function setActiveRouteId(routeId) {
-    window.localStorage.setItem(
-      DISPATCH_CONFIG.activeRouteIdStorageKey,
-      normalizeString(routeId)
-    );
-  }
-
-  function clearActiveRouteId() {
-    window.localStorage.removeItem(DISPATCH_CONFIG.activeRouteIdStorageKey);
-  }
-
-  function getActiveRoute() {
-    const routeId = getActiveRouteId();
-    const routes = getRoutes();
-
-    if (!routeId) {
-      return routes.length ? routes[routes.length - 1] : null;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YRS Dispatch</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #14212f;
+      --muted: #637487;
+      --border: #e4ebf1;
+      --shadow: 0 8px 24px rgba(20, 33, 47, 0.08);
+      --urgent: #d64545;
+      --today: #2f7cf6;
+      --overdue: #ef8b2c;
+      --unrouted: #4b5563;
+      --success: #1f8f4e;
+      --dark: #2f4558;
+      --selected-bg: #eef5ff;
+      --selected-border: #2f7cf6;
     }
 
-    return routes.find((route) => normalizeString(route.id) === routeId) || null;
-  }
-
-  function saveRoute(routeData) {
-    const routes = getRoutes();
-    const nextRoutes = [...routes, routeData];
-    setRoutes(nextRoutes);
-    setActiveRouteId(routeData.id);
-  }
-
-  function removeRouteFromStorage(routeId) {
-    const nextRoutes = getRoutes().filter(
-      (route) => normalizeString(route.id) !== normalizeString(routeId)
-    );
-    setRoutes(nextRoutes);
-
-    const activeRouteId = getActiveRouteId();
-    if (activeRouteId === normalizeString(routeId)) {
-      if (nextRoutes.length) {
-        setActiveRouteId(nextRoutes[nextRoutes.length - 1].id);
-      } else {
-        clearActiveRouteId();
-      }
-    }
-  }
-
-  function updateResumeRouteButton() {
-    if (!els.resumeRouteBtn) return;
-    const routes = getRoutes();
-    els.resumeRouteBtn.hidden = routes.length === 0;
-  }
-
-  function getStartMode() {
-    return normalizeString(els.startModeSelect?.value) || "home";
-  }
-
-  function getStartAddress() {
-    const mode = getStartMode();
-
-    if (mode === "custom") {
-      const custom = normalizeString(els.customStartInput?.value);
-      return custom || DISPATCH_CONFIG.defaultStartAddress;
+    * {
+      box-sizing: border-box;
     }
 
-    return DISPATCH_CONFIG.defaultStartAddress;
-  }
-
-  function getHomeStartCoords() {
-    const lat = Number(DISPATCH_CONFIG.defaultStartLat);
-    const lng = Number(DISPATCH_CONFIG.defaultStartLng);
-
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return { lat: null, lng: null };
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
     }
 
-    return { lat, lng };
-  }
-
-  async function geocodeAddressClient(address) {
-    const safeAddress = normalizeString(address);
-    if (!safeAddress) {
-      return { lat: null, lng: null };
+    .app {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 16px;
     }
 
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(
-        safeAddress
-      )}`;
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        return { lat: null, lng: null };
-      }
-
-      const data = await response.json();
-      const first = Array.isArray(data) ? data[0] : null;
-
-      if (!first) {
-        return { lat: null, lng: null };
-      }
-
-      const lat = Number(first.lat);
-      const lng = Number(first.lon);
-
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return { lat: null, lng: null };
-      }
-
-      return { lat, lng };
-    } catch (_) {
-      return { lat: null, lng: null };
-    }
-  }
-
-  async function resolveStartLocation() {
-    const mode = getStartMode();
-    const startAddress = getStartAddress();
-
-    if (mode === "home") {
-      const coords = getHomeStartCoords();
-      return {
-        address: startAddress,
-        lat: coords.lat,
-        lng: coords.lng,
-        source: "home",
-      };
+    .header {
+      margin-bottom: 16px;
     }
 
-    const customCoords = await geocodeAddressClient(startAddress);
-
-    return {
-      address: startAddress,
-      lat: customCoords.lat,
-      lng: customCoords.lng,
-      source: customCoords.lat !== null && customCoords.lng !== null ? "custom_geocoded" : "custom_unresolved",
-    };
-  }
-
-  function updateStartInputUi() {
-    if (!els.startModeSelect || !els.customStartInput) return;
-    const isCustom = normalizeString(els.startModeSelect.value) === "custom";
-    els.customStartInput.hidden = !isCustom;
-  }
-
-  function setStatus(message) {
-    if (!els.statusBar) return;
-    els.statusBar.textContent = message || "";
-  }
-
-  function setError(message) {
-    if (!els.errorBox) return;
-
-    if (!message) {
-      els.errorBox.hidden = true;
-      els.errorBox.textContent = "";
-      return;
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
     }
 
-    els.errorBox.hidden = false;
-    els.errorBox.textContent = message;
-  }
-
-  function setLoadingButtons() {
-    const busy = state.isLoadingCounts || state.isLoadingLeads;
-
-    if (els.refreshBtn) {
-      els.refreshBtn.disabled = busy;
-      els.refreshBtn.textContent = busy ? "Loading..." : "Refresh";
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
 
-    if (els.optimizeBtn) {
-      els.optimizeBtn.disabled = state.isLoadingLeads;
-      els.optimizeBtn.textContent = state.isLoadingLeads
-        ? "Loading..."
-        : "Optimize Today";
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.2;
     }
 
-    if (els.emergencyOptimizeBtn) {
-      els.emergencyOptimizeBtn.disabled = state.isLoadingLeads;
-      els.emergencyOptimizeBtn.textContent = state.isLoadingLeads
-        ? "Loading..."
-        : "Emergency Optimize";
-    }
-  }
-
-  function getFilterQuery(filterKey) {
-    switch (filterKey) {
-      case "urgent":
-        return "urgent=true";
-      case "today":
-        return "today=true";
-      case "overdue":
-        return "overdue=true";
-      case "unrouted":
-        return "route_status=unrouted";
-      default:
-        return "";
-    }
-  }
-
-  function getFilterTitle(filterKey) {
-    switch (filterKey) {
-      case "urgent":
-        return "Urgent Leads";
-      case "today":
-        return "Today Leads";
-      case "overdue":
-        return "Overdue Leads";
-      case "unrouted":
-        return "Unrouted Leads";
-      default:
-        return "All Leads";
-    }
-  }
-
-  function getFilterSubtitle(filterKey) {
-    switch (filterKey) {
-      case "urgent":
-        return "Leaks, emergencies, and high-pressure jobs first";
-      case "today":
-        return "Jobs assigned or due today";
-      case "overdue":
-        return "Older jobs still needing action";
-      case "unrouted":
-        return "Dispatch-ready leads not yet routed";
-      default:
-        return "Showing dispatch-ready leads only";
-    }
-  }
-
-  function setActiveFilterUi(filterKey) {
-    state.activeFilter = filterKey || null;
-
-    els.filterCards.forEach((card) => {
-      const isActive = card.dataset.filter === state.activeFilter;
-      card.style.outline = isActive ? "3px solid #14212f" : "none";
-      card.style.outlineOffset = isActive ? "2px" : "0";
-    });
-
-    if (els.showAllBtn) {
-      els.showAllBtn.classList.toggle("active", !state.activeFilter);
+    .refresh-btn {
+      border: none;
+      border-radius: 12px;
+      background: var(--dark);
+      color: white;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 44px;
+      white-space: nowrap;
     }
 
-    if (els.clearFilterBtn) {
-      els.clearFilterBtn.classList.toggle("active", Boolean(state.activeFilter));
+    .refresh-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
-    if (els.panelTitle) {
-      els.panelTitle.textContent = getFilterTitle(state.activeFilter);
+    .status-bar {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 18px;
     }
 
-    if (els.panelSubtitle) {
-      els.panelSubtitle.textContent = getFilterSubtitle(state.activeFilter);
-    }
-  }
-
-  async function fetchJson(path) {
-    const response = await fetch(getApiUrl(path), {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
-    const json = await response.json();
-
-    if (!json || json.success !== true) {
-      throw new Error(json?.error || "Request did not return success");
+    .filter-card {
+      border: none;
+      border-radius: 18px;
+      padding: 18px 16px;
+      color: white;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      min-height: 108px;
     }
 
-    return json;
-  }
-
-  async function postJson(path, body) {
-    const response = await fetch(getApiUrl(path), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {}),
-    });
-
-    const json = await response.json().catch(() => null);
-
-    if (!response.ok || !json || json.success !== true) {
-      throw new Error(json?.error || `POST failed: ${path}`);
+    .filter-card .label {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      opacity: 0.95;
     }
 
-    return json;
-  }
-
-  function renderEmptyState(message) {
-    if (!els.leadList) return;
-    els.leadList.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
-  }
-
-  function renderLoadingState() {
-    if (!els.leadList) return;
-    els.leadList.innerHTML = `<div class="loading">Loading leads...</div>`;
-  }
-
-  function renderRouteEmptyState(message) {
-    if (!els.routeOutput) return;
-    els.routeOutput.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
-  }
-
-  function updateSelectionNote() {
-    if (!els.selectionNote) return;
-
-    const count = state.selectedLeadIds.length;
-    const routesCount = getRoutes().length;
-
-    if (count === 0) {
-      els.selectionNote.textContent =
-        routesCount > 0
-          ? `Select jobs first, then optimize your day. You currently have ${routesCount} saved route${routesCount === 1 ? "" : "s"}.`
-          : "Select jobs first, then optimize your day.";
-      return;
+    .filter-card .count {
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 8px;
     }
 
-    els.selectionNote.textContent = `${count} job${count === 1 ? "" : "s"} selected for routing.`;
-  }
-
-  function isSelectedLead(lead) {
-    return state.selectedLeadIds.includes(getLeadId(lead));
-  }
-
-  function isLeadUrgent(lead) {
-    const priority = normalizeString(lead?.priority).toLowerCase();
-    const serviceType = normalizeString(lead?.service_type).toLowerCase();
-    const details = normalizeString(lead?.details).toLowerCase();
-
-    return (
-      priority.includes("urgent") ||
-      priority.includes("emergency") ||
-      priority.includes("asap") ||
-      priority.includes("high") ||
-      serviceType.includes("emergency") ||
-      serviceType.includes("leak") ||
-      details.includes("leak") ||
-      details.includes("urgent")
-    );
-  }
-
-  function isLeadOverdue(lead) {
-    const submittedAt =
-      normalizeString(lead?.submitted_at) || normalizeString(lead?.received_at);
-
-    if (!submittedAt) return false;
-
-    const parsed = new Date(submittedAt);
-    if (Number.isNaN(parsed.getTime())) return false;
-
-    const routeStatus = normalizeString(lead?.route_status).toLowerCase();
-    const status = normalizeString(lead?.status).toLowerCase();
-
-    if (routeStatus === "done" || status === "completed") {
-      return false;
+    .filter-card .subtext {
+      font-size: 12px;
+      opacity: 0.9;
+      line-height: 1.35;
     }
 
-    const ageMs = Date.now() - parsed.getTime();
-    return ageMs >= 48 * 60 * 60 * 1000;
-  }
+    .filter-card.urgent { background: var(--urgent); }
+    .filter-card.today { background: var(--today); }
+    .filter-card.overdue { background: var(--overdue); }
+    .filter-card.unrouted { background: var(--unrouted); }
 
-  function getPreferredTimeWeight(lead) {
-    const preferredTime = normalizeString(lead?.preferred_time).toLowerCase();
-
-    if (preferredTime.includes("morning")) return 20;
-    if (preferredTime.includes("afternoon")) return 10;
-    if (preferredTime.includes("anytime")) return 5;
-
-    return 0;
-  }
-
-  function getCityClusterWeight(lead) {
-    const city = normalizeString(lead?.city).toLowerCase();
-
-    if (city.includes("kitchener")) return 15;
-    if (city.includes("waterloo")) return 12;
-    if (city.includes("cambridge")) return 10;
-    return 4;
-  }
-
-  function getHybridScore(lead) {
-    let score = 0;
-
-    if (isLeadUrgent(lead)) score += 100;
-    if (isLeadOverdue(lead)) score += 50;
-
-    score += getPreferredTimeWeight(lead);
-    score += getCityClusterWeight(lead);
-
-    return score;
-  }
-
-  function getLeadBadgeClass(lead) {
-    return isLeadUrgent(lead) ? "urgent" : "";
-  }
-
-  function getLeadBadgeText(lead) {
-    const priority = normalizeString(lead?.priority);
-    const routeStatus = normalizeString(lead?.route_status) || "unrouted";
-
-    if (priority.toLowerCase().includes("urgent")) return "Urgent";
-    if (normalizeString(lead?.service_type).toLowerCase().includes("emergency")) {
-      return "Emergency";
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
     }
 
-    return routeStatus;
-  }
+    .control-btn {
+      flex: 1;
+      border: none;
+      border-radius: 14px;
+      background: white;
+      color: var(--text);
+      padding: 14px 12px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 48px;
+    }
 
-  function filterOutRoutedLeads(leads) {
-    return (Array.isArray(leads) ? leads : []).filter((lead) => {
-      const routeStatus = normalizeString(lead?.route_status).toLowerCase();
-      return !["routed", "arrived", "done"].includes(routeStatus);
-    });
-  }
+    .control-btn.active {
+      background: var(--dark);
+      color: white;
+    }
 
-  function dedupeByAddress(leads) {
-    const seen = new Set();
+    .route-build-panel {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
 
-    return (Array.isArray(leads) ? leads : []).filter((lead) => {
-      const normalized = normalizeAddress(getLeadAddress(lead));
-      if (!normalized) return true;
-      if (seen.has(normalized)) return false;
-      seen.add(normalized);
-      return true;
-    });
-  }
+    .panel {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
 
-  function dedupeSelectedLeadIds(leadIds) {
-    const seen = new Set();
-    const selectedLeads = state.allLeads.filter((lead) =>
-      leadIds.includes(getLeadId(lead))
-    );
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
 
-    return selectedLeads
-      .filter((lead) => {
-        const normalized = normalizeAddress(getLeadAddress(lead));
-        if (!normalized) return true;
-        if (seen.has(normalized)) return false;
-        seen.add(normalized);
-        return true;
-      })
-      .map(getLeadId)
-      .filter(Boolean);
-  }
+    .panel-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
 
-  function groupLeadsForRouting(leads) {
-    const groups = new Map();
+    .panel-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+    }
 
-    (Array.isArray(leads) ? leads : []).forEach((lead) => {
-      const key = `${normalizeString(lead?.city).toLowerCase()}::${normalizeAddress(
-        getLeadAddress(lead)
-      )}`;
+    .route-build-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
 
-      if (!groups.has(key)) {
-        groups.set(key, []);
+    .field-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field-input,
+    .field-select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 12px;
+      background: #fff;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .optimize-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .optimize-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: #000;
+      color: white;
+      padding: 16px 14px;
+      font-size: 15px;
+      font-weight: 800;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 52px;
+    }
+
+    .optimize-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .optimize-btn.emergency {
+      background: var(--urgent);
+    }
+
+    .selection-note {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      min-height: 18px;
+    }
+
+    .resume-wrap {
+      margin-top: 10px;
+    }
+
+    .resume-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      background: var(--success);
+      color: white;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    .lead-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .lead-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+      transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      cursor: pointer;
+    }
+
+    .lead-card.selected {
+      border: 2px solid var(--selected-border);
+      background: var(--selected-bg);
+      box-shadow: 0 8px 18px rgba(47, 124, 246, 0.12);
+    }
+
+    .lead-select-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .lead-select-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .lead-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--today);
+      pointer-events: none;
+    }
+
+    .lead-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .lead-name {
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .lead-badge {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-radius: 999px;
+      padding: 6px 8px;
+      white-space: nowrap;
+      color: white;
+      background: var(--unrouted);
+    }
+
+    .lead-badge.urgent {
+      background: var(--urgent);
+    }
+
+    .lead-address {
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .lead-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .meta-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .meta-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+
+    .meta-value {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .lead-score {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .lead-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .action-btn {
+      border: none;
+      border-radius: 12px;
+      padding: 14px 12px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    .call-btn {
+      background: var(--success);
+      color: white;
+    }
+
+    .map-btn {
+      background: var(--today);
+      color: white;
+    }
+
+    .delete-btn {
+      background: var(--urgent);
+      color: white;
+    }
+
+    .route-output {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .route-step {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .route-step-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .route-number {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--today);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .route-step-address {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    .route-step-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .empty-state {
+      padding: 22px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .loading {
+      padding: 18px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .error {
+      padding: 14px;
+      border-radius: 14px;
+      background: #fff3f3;
+      color: #a12626;
+      border: 1px solid #f3caca;
+      margin-bottom: 12px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 640px) {
+      .title-row {
+        align-items: flex-start;
+        flex-direction: column;
       }
 
-      groups.get(key).push(lead);
-    });
+      .refresh-btn {
+        width: 100%;
+      }
 
-    return Array.from(groups.values());
-  }
+      .filters-grid,
+      .route-build-grid,
+      .optimize-wrap,
+      .lead-meta,
+      .lead-actions {
+        grid-template-columns: 1fr;
+      }
 
-  function orderLeadGroups(leadGroups) {
-    return [...leadGroups].sort((groupA, groupB) => {
-      const bestA = Math.max(...groupA.map(getHybridScore));
-      const bestB = Math.max(...groupB.map(getHybridScore));
-
-      if (bestB !== bestA) return bestB - bestA;
-
-      const cityA = normalizeString(groupA[0]?.city).toLowerCase();
-      const cityB = normalizeString(groupB[0]?.city).toLowerCase();
-
-      if (cityA < cityB) return -1;
-      if (cityA > cityB) return 1;
-
-      const addressA = normalizeAddress(getLeadAddress(groupA[0]));
-      const addressB = normalizeAddress(getLeadAddress(groupB[0]));
-
-      if (addressA < addressB) return -1;
-      if (addressA > addressB) return 1;
-
-      return 0;
-    });
-  }
-
-  function buildSmarterRoute(selectedLeads, emergencyOnly) {
-    const sourceLeads = emergencyOnly
-      ? selectedLeads.filter(isLeadUrgent)
-      : selectedLeads;
-
-    const deduped = dedupeByAddress(sourceLeads);
-    const grouped = groupLeadsForRouting(deduped);
-    const orderedGroups = orderLeadGroups(grouped);
-
-    return orderedGroups.map((group, index) => {
-      const lead = group[0];
-      return {
-        ...lead,
-        route_order: index,
-        grouped_lead_ids: group.map(getLeadId).filter(Boolean),
-        grouped_count: group.length,
-      };
-    });
-  }
-
-  function toggleLeadSelection(lead) {
-    const leadId = getLeadId(lead);
-    if (!leadId) return;
-
-    if (state.selectedLeadIds.includes(leadId)) {
-      state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
-    } else {
-      state.selectedLeadIds = dedupeSelectedLeadIds([
-        ...state.selectedLeadIds,
-        leadId,
-      ]);
+      .controls {
+        flex-direction: column;
+      }
     }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="eyebrow">Your Roof Specialist</div>
+      <div class="title-row">
+        <h1>Dispatch Dashboard</h1>
+        <button id="refreshBtn" class="refresh-btn" type="button">Refresh</button>
+      </div>
+      <div id="statusBar" class="status-bar">Loading dispatch data...</div>
+    </div>
 
-    updateSelectionNote();
-    renderLeads(state.allLeads);
-  }
+    <div class="filters-grid">
+      <button class="filter-card urgent" type="button" data-filter="urgent">
+        <div class="label">Urgent</div>
+        <div class="count" id="urgentCount">0</div>
+        <div class="subtext">Leaks, emergencies, high priority</div>
+      </button>
 
-  function buildLeadCardHtml(lead) {
-    const firstName = formatDisplay(lead?.first_name, "");
-    const lastName = formatDisplay(lead?.last_name, "");
-    const fullName = `${firstName} ${lastName}`.trim() || "Unnamed Lead";
+      <button class="filter-card today" type="button" data-filter="today">
+        <div class="label">Today</div>
+        <div class="count" id="todayCount">0</div>
+        <div class="subtext">Assigned or due today</div>
+      </button>
 
-    const address = getLeadAddress(lead);
-    const city = formatDisplay(lead?.city);
-    const serviceType = formatDisplay(lead?.service_type);
-    const priority = formatDisplay(lead?.priority);
-    const preferredTime = formatDisplay(lead?.preferred_time);
-    const routeStatus = formatDisplay(lead?.route_status, "unrouted");
-    const badgeClass = getLeadBadgeClass(lead);
-    const badgeText = getLeadBadgeText(lead);
-    const phone = getLeadPhone(lead);
-    const selected = isSelectedLead(lead);
-    const score = getHybridScore(lead);
+      <button class="filter-card overdue" type="button" data-filter="overdue">
+        <div class="label">Overdue</div>
+        <div class="count" id="overdueCount">0</div>
+        <div class="subtext">Older than 48 hours</div>
+      </button>
 
-    return `
-      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(
-      getLeadId(lead)
-    )}">
-        <div class="lead-select-row">
-          <div class="lead-select-label">Tap to select</div>
-          <input class="lead-checkbox" type="checkbox" ${
-            selected ? "checked" : ""
-          } tabindex="-1" aria-hidden="true" />
-        </div>
+      <button class="filter-card unrouted" type="button" data-filter="unrouted">
+        <div class="label">Unrouted</div>
+        <div class="count" id="unroutedCount">0</div>
+        <div class="subtext">Not yet routed</div>
+      </button>
+    </div>
 
-        <div class="lead-top">
-          <div class="lead-name">${escapeHtml(fullName)}</div>
-          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(
-      badgeText
-    )}</div>
-        </div>
+    <div class="controls">
+      <button id="showAllBtn" class="control-btn active" type="button">All Leads</button>
+      <button id="clearFilterBtn" class="control-btn" type="button">Clear Filter</button>
+    </div>
 
-        <div class="lead-address">${escapeHtml(address || city)}</div>
-
-        <div class="lead-meta">
-          <div class="meta-box">
-            <div class="meta-label">Service</div>
-            <div class="meta-value">${escapeHtml(serviceType)}</div>
-          </div>
-
-          <div class="meta-box">
-            <div class="meta-label">Priority</div>
-            <div class="meta-value">${escapeHtml(priority)}</div>
-          </div>
-
-          <div class="meta-box">
-            <div class="meta-label">Preferred Time</div>
-            <div class="meta-value">${escapeHtml(preferredTime)}</div>
-          </div>
-
-          <div class="meta-box">
-            <div class="meta-label">Route Status</div>
-            <div class="meta-value">${escapeHtml(routeStatus)}</div>
-          </div>
-        </div>
-
-        <div class="lead-score">Route Score: ${escapeHtml(String(score))}</div>
-
-        <div class="lead-actions">
-          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(
-            phone
-          )}">
-            Call
-          </button>
-          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(
-            address
-          )}">
-            Map
-          </button>
-          <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(
-            getLeadId(lead)
-          )}">
-            Delete
-          </button>
+    <div class="route-build-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Build Route</div>
+          <div class="panel-subtitle">Choose a start point, select jobs, then optimize the route.</div>
         </div>
       </div>
-    `;
-  }
 
-  function renderLeads(leads) {
-    if (!els.leadList) return;
-
-    if (!Array.isArray(leads) || leads.length === 0) {
-      renderEmptyState("No leads match this filter right now.");
-      return;
-    }
-
-    els.leadList.innerHTML = leads.map(buildLeadCardHtml).join("");
-
-    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach(
-      (card) => {
-        card.addEventListener("click", function () {
-          const leadId = normalizeString(card.getAttribute("data-lead-id"));
-          const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
-          if (!lead) return;
-          toggleLeadSelection(lead);
-        });
-      }
-    );
-
-    Array.from(els.leadList.querySelectorAll("[data-phone]")).forEach((btn) => {
-      btn.addEventListener("click", function (event) {
-        event.stopPropagation();
-
-        const phone = normalizeString(btn.getAttribute("data-phone"));
-        if (!phone) {
-          window.alert("No phone number available for this lead.");
-          return;
-        }
-
-        window.location.href = `tel:${phone}`;
-      });
-    });
-
-    Array.from(els.leadList.querySelectorAll("[data-address]")).forEach((btn) => {
-      btn.addEventListener("click", function (event) {
-        event.stopPropagation();
-
-        const address = normalizeString(btn.getAttribute("data-address"));
-        if (!address) {
-          window.alert("No address available for this lead.");
-          return;
-        }
-
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          address
-        )}`;
-        window.open(mapsUrl, "_blank", "noopener,noreferrer");
-      });
-    });
-
-    Array.from(els.leadList.querySelectorAll("[data-delete]")).forEach((btn) => {
-      btn.addEventListener("click", async function (event) {
-        event.stopPropagation();
-
-        const leadId = normalizeString(btn.getAttribute("data-delete"));
-        if (!leadId) return;
-
-        const confirmed = window.confirm(
-          "Delete this lead permanently? This cannot be undone."
-        );
-
-        if (!confirmed) return;
-
-        try {
-          await postJson("/api/delete-leads", { leadIds: [leadId] });
-
-          state.selectedLeadIds = state.selectedLeadIds.filter(
-            (id) => id !== leadId
-          );
-
-          await handleRefresh();
-          setStatus("Lead deleted.");
-        } catch (error) {
-          console.error("Delete failed:", error);
-          setError("Could not delete lead.");
-          setStatus("Delete failed.");
-        }
-      });
-    });
-  }
-
-  function renderRoute(routeLeads) {
-    if (!Array.isArray(routeLeads) || routeLeads.length === 0) {
-      renderRouteEmptyState("No route built yet. Select leads and tap Optimize Today.");
-      return;
-    }
-
-    const startAddress = getStartAddress();
-
-    els.routeOutput.innerHTML = `
-      <div class="route-step">
-        <div class="route-step-top">
-          <div class="route-number">Start</div>
-          <div class="lead-badge">Home Base</div>
+      <div class="route-build-grid">
+        <div class="field-wrap">
+          <label for="startModeSelect" class="field-label">Starting Point</label>
+          <select id="startModeSelect" class="field-select">
+            <option value="home">Home Address</option>
+            <option value="first">First Selected Address</option>
+            <option value="custom">Custom Address</option>
+          </select>
         </div>
-        <div class="route-step-address">${escapeHtml(startAddress)}</div>
-        <div class="route-step-meta">Starting point for this route</div>
+
+        <div class="field-wrap">
+          <label for="customStartInput" class="field-label">Custom Address</label>
+          <input
+            id="customStartInput"
+            class="field-input"
+            type="text"
+            placeholder="Enter a custom start address"
+            hidden
+          />
+        </div>
       </div>
 
-      ${routeLeads
-        .map((lead, index) => {
-          const address = getLeadAddress(lead);
-          const serviceType = formatDisplay(lead?.service_type);
-          const priority = formatDisplay(lead?.priority);
-          const preferredTime = formatDisplay(lead?.preferred_time);
-          const score = getHybridScore(lead);
-          const groupedCount = Number(lead?.grouped_count || 1);
+      <div class="optimize-wrap">
+        <button id="optimizeBtn" class="optimize-btn" type="button">Optimize Route</button>
+        <button id="emergencyOptimizeBtn" class="optimize-btn emergency" type="button">Emergency Optimize</button>
+      </div>
 
-          return `
-            <div class="route-step">
-              <div class="route-step-top">
-                <div class="route-number">Stop ${index + 1}</div>
-                <div class="lead-badge ${escapeHtml(getLeadBadgeClass(lead))}">
-                  ${escapeHtml(getLeadBadgeText(lead))}
-                </div>
-              </div>
+      <div id="selectionNote" class="selection-note">Select jobs first, then optimize your route.</div>
 
-              <div class="route-step-address">${escapeHtml(address)}</div>
-              <div class="route-step-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-            preferredTime
-          )} • Score ${escapeHtml(String(score))}
-                ${
-                  groupedCount > 1
-                    ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop`
-                    : ""
-                }
-              </div>
-            </div>
-          `;
-        })
-        .join("")}
-    `;
-  }
+      <div class="resume-wrap">
+        <button id="resumeRouteBtn" class="resume-btn" type="button" hidden>Resume Current Route</button>
+      </div>
+    </div>
 
-  async function loadCounts() {
-    state.isLoadingCounts = true;
-    setLoadingButtons();
-    setError("");
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Optimized Route Preview</div>
+          <div class="panel-subtitle">Hybrid logic: urgency → overdue → preferred time → grouped stops</div>
+        </div>
+      </div>
 
-    try {
-      const [urgent, today, overdue, unrouted] = await Promise.all([
-        fetchJson("/api/leads-db?urgent=true"),
-        fetchJson("/api/leads-db?today=true"),
-        fetchJson("/api/leads-db?overdue=true"),
-        fetchJson("/api/leads-db?route_status=unrouted"),
-      ]);
+      <div id="routeOutput" class="route-output">
+        <div class="empty-state">No route built yet. Select leads and tap Optimize Route.</div>
+      </div>
+    </div>
 
-      const urgentLeads = filterOutRoutedLeads(urgent.leads);
-      const todayLeads = filterOutRoutedLeads(today.leads);
-      const overdueLeads = filterOutRoutedLeads(overdue.leads);
-      const unroutedLeads = filterOutRoutedLeads(unrouted.leads);
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div id="panelTitle" class="panel-title">All Leads</div>
+          <div id="panelSubtitle" class="panel-subtitle">Showing all dispatch-ready leads</div>
+        </div>
+      </div>
 
-      if (els.urgentCount) els.urgentCount.textContent = String(urgentLeads.length);
-      if (els.todayCount) els.todayCount.textContent = String(todayLeads.length);
-      if (els.overdueCount) els.overdueCount.textContent = String(overdueLeads.length);
-      if (els.unroutedCount) els.unroutedCount.textContent = String(unroutedLeads.length);
-    } catch (error) {
-      console.error("Failed to load dashboard counts:", error);
-      setError("Could not load dashboard counts. Please refresh.");
-    } finally {
-      state.isLoadingCounts = false;
-      setLoadingButtons();
-    }
-  }
+      <div id="errorBox" class="error" hidden></div>
+      <div id="leadList" class="lead-list"></div>
+    </div>
+  </div>
 
-  async function loadLeadView(filterKey) {
-    state.isLoadingLeads = true;
-    setLoadingButtons();
-    setError("");
-    renderLoadingState();
-    setActiveFilterUi(filterKey);
-
-    try {
-      const query = getFilterQuery(filterKey);
-      const path = query ? `/api/leads-db?${query}` : "/api/leads-db";
-      const result = await fetchJson(path);
-
-      state.allLeads = filterOutRoutedLeads(result.leads);
-      state.selectedLeadIds = dedupeSelectedLeadIds(state.selectedLeadIds);
-      renderLeads(state.allLeads);
-
-      const count = state.allLeads.length;
-      setStatus(`${getFilterTitle(filterKey)} loaded: ${count} lead${count === 1 ? "" : "s"}.`);
-    } catch (error) {
-      console.error("Failed to load lead view:", error);
-      renderEmptyState("Could not load leads.");
-      setError("Could not load dispatch leads. Please refresh and try again.");
-      setStatus("Load failed.");
-    } finally {
-      state.isLoadingLeads = false;
-      setLoadingButtons();
-      updateSelectionNote();
-    }
-  }
-
-  async function assignRoute(routeLeads, routeId) {
-    await postJson("/api/route/assign", {
-      lead_ids: routeLeads.map(getLeadId).filter(Boolean),
-      route_id: routeId,
-      assigned_day: new Date().toISOString().slice(0, 10),
-    });
-  }
-
-  async function createAndOpenRoute(emergencyOnly) {
-    const selectedLeads = state.allLeads.filter((lead) =>
-      state.selectedLeadIds.includes(getLeadId(lead))
-    );
-
-    if (!selectedLeads.length) {
-      state.optimizedRoute = [];
-      renderRoute([]);
-      setStatus("No jobs selected. Tap leads first, then optimize.");
-      return;
-    }
-
-    const smarterRoute = buildSmarterRoute(selectedLeads, emergencyOnly);
-
-    if (!smarterRoute.length) {
-      state.optimizedRoute = [];
-      renderRoute([]);
-      setStatus(
-        emergencyOnly
-          ? "No emergency jobs found in your selected leads."
-          : "No valid route could be created."
-      );
-      return;
-    }
-
-    const startLocation = await resolveStartLocation();
-    const routeId = `route_${Date.now()}`;
-
-    try {
-      await assignRoute(smarterRoute, routeId);
-
-      const routeData = {
-        id: routeId,
-        label: emergencyOnly
-          ? `Emergency Route ${new Date().toLocaleTimeString()}`
-          : `Route ${new Date().toLocaleTimeString()}`,
-        createdAt: new Date().toISOString(),
-        type: emergencyOnly ? "emergency" : "standard",
-        startAddress: startLocation.address,
-        startLat: startLocation.lat,
-        startLng: startLocation.lng,
-        startSource: startLocation.source,
-        stops: smarterRoute,
-      };
-
-      saveRoute(routeData);
-
-      state.optimizedRoute = smarterRoute;
-      renderRoute(smarterRoute);
-      state.selectedLeadIds = [];
-      updateSelectionNote();
-      updateResumeRouteButton();
-
-      await Promise.all([loadCounts(), loadLeadView(state.activeFilter)]);
-      window.location.href = "./route.html";
-    } catch (error) {
-      console.error("Failed to optimize route:", error);
-      removeRouteFromStorage(routeId);
-      setError("Could not create route. Check backend route endpoints and try again.");
-      setStatus("Route creation failed.");
-    }
-  }
-
-  async function optimizeRoute() {
-    await createAndOpenRoute(false);
-  }
-
-  async function emergencyOptimizeRoute() {
-    const emergencyLeads = state.allLeads.filter(
-      (lead) => state.selectedLeadIds.includes(getLeadId(lead)) && isLeadUrgent(lead)
-    );
-
-    if (!emergencyLeads.length) {
-      window.alert("No emergency jobs selected.");
-      return;
-    }
-
-    const emergencyLeadIds = emergencyLeads.map(getLeadId).filter(Boolean);
-    state.selectedLeadIds = dedupeSelectedLeadIds(emergencyLeadIds);
-    await createAndOpenRoute(true);
-  }
-
-  async function handleRefresh() {
-    await Promise.all([loadCounts(), loadLeadView(state.activeFilter)]);
-  }
-
-  function bindEvents() {
-    if (els.refreshBtn) {
-      els.refreshBtn.addEventListener("click", handleRefresh);
-    }
-
-    if (els.showAllBtn) {
-      els.showAllBtn.addEventListener("click", function () {
-        loadLeadView(null);
-      });
-    }
-
-    if (els.clearFilterBtn) {
-      els.clearFilterBtn.addEventListener("click", function () {
-        loadLeadView(null);
-      });
-    }
-
-    if (els.optimizeBtn) {
-      els.optimizeBtn.addEventListener("click", optimizeRoute);
-    }
-
-    if (els.emergencyOptimizeBtn) {
-      els.emergencyOptimizeBtn.addEventListener("click", emergencyOptimizeRoute);
-    }
-
-    if (els.resumeRouteBtn) {
-      els.resumeRouteBtn.addEventListener("click", function () {
-        window.location.href = "./route.html";
-      });
-    }
-
-    if (els.startModeSelect) {
-      els.startModeSelect.addEventListener("change", updateStartInputUi);
-    }
-
-    els.filterCards.forEach((card) => {
-      card.addEventListener("click", function () {
-        const filterKey = normalizeString(card.dataset.filter);
-        loadLeadView(filterKey);
-      });
-    });
-  }
-
-  async function init() {
-    bindEvents();
-    setActiveFilterUi(null);
-    updateSelectionNote();
-    updateStartInputUi();
-    updateResumeRouteButton();
-    renderRoute([]);
-
-    await Promise.all([loadCounts(), loadLeadView(null)]);
-  }
-
-  init();
-})();
+  <script src="./dispatch.js"></script>
+</body>
+</html>
