@@ -31,9 +31,9 @@ const ROUTE_CONFIG = {
   let tileLayer = null;
   let routePolyline = null;
   let markerLayer = null;
-  let activeMarkersByLeadId = new Map();
-  let fallbackMessageRendered = false;
+  let markersByStopIndex = new Map();
   let lastBoundsPoints = [];
+  let fallbackMessageRendered = false;
 
   function normalizeString(value) {
     return typeof value === "string" ? value.trim() : "";
@@ -259,7 +259,6 @@ const ROUTE_CONFIG = {
     if (!addresses.length) return "";
 
     const origin = startAddress || addresses[0];
-
     let destination = addresses[addresses.length - 1];
     let waypoints = addresses.slice(0, -1);
 
@@ -281,7 +280,7 @@ const ROUTE_CONFIG = {
   }
 
   function getMapPadding() {
-    return window.innerWidth <= 640 ? [18, 18] : [30, 30];
+    return window.innerWidth <= 640 ? [16, 16] : [30, 30];
   }
 
   function invalidateAndRefitMap() {
@@ -296,7 +295,7 @@ const ROUTE_CONFIG = {
       } else if (lastBoundsPoints.length > 1) {
         map.fitBounds(lastBoundsPoints, { padding: getMapPadding() });
       }
-    }, 120);
+    }, 140);
   }
 
   function renderEmpty() {
@@ -340,7 +339,7 @@ const ROUTE_CONFIG = {
   }
 
   function destroyMap() {
-    activeMarkersByLeadId = new Map();
+    markersByStopIndex = new Map();
     fallbackMessageRendered = false;
     lastBoundsPoints = [];
 
@@ -407,11 +406,13 @@ const ROUTE_CONFIG = {
     });
   }
 
-  function focusStopByLeadId(leadId) {
-    const marker = activeMarkersByLeadId.get(normalizeString(leadId));
+  function focusStopByIndex(stopIndex) {
+    const marker = markersByStopIndex.get(Number(stopIndex));
     if (!marker || !map) return;
 
     const latLng = marker.getLatLng();
+    if (!latLng || !Number.isFinite(latLng.lat) || !Number.isFinite(latLng.lng)) return;
+
     map.flyTo(latLng, Math.max(map.getZoom(), 14), {
       animate: true,
       duration: 0.6,
@@ -420,8 +421,8 @@ const ROUTE_CONFIG = {
     marker.openPopup();
 
     Array.from(document.querySelectorAll(".stop-card")).forEach((card) => {
-      const cardLeadId = normalizeString(card.getAttribute("data-lead-id"));
-      card.classList.toggle("active", cardLeadId === normalizeString(leadId));
+      const cardIndex = Number(card.getAttribute("data-stop-index"));
+      card.classList.toggle("active", cardIndex === Number(stopIndex));
     });
   }
 
@@ -496,7 +497,7 @@ const ROUTE_CONFIG = {
 
     if (!m) return;
 
-    activeMarkersByLeadId = new Map();
+    markersByStopIndex = new Map();
 
     if (markerLayer) {
       markerLayer.clearLayers();
@@ -507,26 +508,11 @@ const ROUTE_CONFIG = {
       routePolyline = null;
     }
 
-    const stopsWithCoords = stops.filter(hasCoordinates);
     const boundsPoints = [];
     const linePoints = [];
 
-    if (!stopsWithCoords.length) {
-      destroyMap();
-      if (els.routeMap && !fallbackMessageRendered) {
-        els.routeMap.innerHTML = `
-          <div class="map-fallback">
-            This route does not have enough map coordinates yet to render a live local-area map.
-            The stops are still listed below and the Google Maps route button will still work.
-          </div>
-        `;
-        fallbackMessageRendered = true;
-      }
-
-      if (els.mapNote) {
-        els.mapNote.textContent =
-          "No map pins available yet because these stops are missing coordinates.";
-      }
+    if (!stops.length) {
+      renderEmpty();
       return;
     }
 
@@ -547,28 +533,47 @@ const ROUTE_CONFIG = {
 
       const lat = getLat(lead);
       const lng = getLng(lead);
-      const leadId = getLeadId(lead);
 
-      linePoints.push([lat, lng]);
-      boundsPoints.push([lat, lng]);
-
-      const popupHtml = `
-        <strong>Stop ${index + 1}</strong><br>
-        ${escapeHtml(getLeadAddress(lead))}<br>
-        ${escapeHtml(formatDisplay(lead?.service_type))} • ${escapeHtml(getBadgeText(lead))}
-      `;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       const marker = L.marker([lat, lng], {
         icon: createStopIcon(index, lead),
-      }).bindPopup(popupHtml);
+      }).bindPopup(
+        `
+          <strong>Stop ${index + 1}</strong><br>
+          ${escapeHtml(getLeadAddress(lead))}<br>
+          ${escapeHtml(formatDisplay(lead?.service_type))} • ${escapeHtml(getBadgeText(lead))}
+        `
+      );
 
       marker.on("click", function () {
-        focusStopByLeadId(leadId);
+        focusStopByIndex(index);
       });
 
       markerLayer.addLayer(marker);
-      activeMarkersByLeadId.set(leadId, marker);
+      markersByStopIndex.set(index, marker);
+      linePoints.push([lat, lng]);
+      boundsPoints.push([lat, lng]);
     });
+
+    if (!linePoints.length) {
+      destroyMap();
+      if (els.routeMap && !fallbackMessageRendered) {
+        els.routeMap.innerHTML = `
+          <div class="map-fallback">
+            This route does not have enough valid map coordinates yet to render a live local-area map.
+            The stops are still listed below and the Google Maps route button will still work.
+          </div>
+        `;
+        fallbackMessageRendered = true;
+      }
+
+      if (els.mapNote) {
+        els.mapNote.textContent =
+          "No valid map pins available yet because these stops are missing coordinates.";
+      }
+      return;
+    }
 
     let polylinePoints =
       startPoint.lat !== null && startPoint.lng !== null
@@ -576,7 +581,7 @@ const ROUTE_CONFIG = {
         : [...linePoints];
 
     if (endMode === "round_trip" && startPoint.lat !== null && startPoint.lng !== null) {
-      polylinePoints = [...polylinePoints, [startPoint.lat, startPoint.lng]];
+      polylinePoints.push([startPoint.lat, startPoint.lng]);
       boundsPoints.push([startPoint.lat, startPoint.lng]);
     }
 
@@ -614,8 +619,8 @@ const ROUTE_CONFIG = {
           ? "Route returns to the start point."
           : "Route ends at the last stop.";
 
-      els.mapNote.textContent = `${stopsWithCoords.length} mapped stop${
-        stopsWithCoords.length === 1 ? "" : "s"
+      els.mapNote.textContent = `${linePoints.length} mapped stop${
+        linePoints.length === 1 ? "" : "s"
       } rendered. ${startSourceText} ${endModeText}`;
     }
   }
@@ -649,7 +654,7 @@ const ROUTE_CONFIG = {
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
         return `
-          <div class="stop-card" data-lead-id="${escapeHtml(getLeadId(lead))}">
+          <div class="stop-card" data-stop-index="${index}">
             <div class="stop-top">
               <div>
                 <div class="stop-number">Stop ${index + 1}</div>
@@ -662,8 +667,8 @@ const ROUTE_CONFIG = {
 
             <div class="stop-meta">
               ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-                preferredTime
-              )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
+          preferredTime
+        )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
             </div>
 
             <div class="stop-meta">
@@ -673,8 +678,8 @@ const ROUTE_CONFIG = {
             <div class="stop-actions">
               <button class="btn btn-success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
               <button class="btn btn-primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${
-                hasMap ? "" : "disabled"
-              }>Map</button>
+          hasMap ? "" : "disabled"
+        }>Map</button>
               <button class="btn btn-dark" type="button" data-arrived="${escapeHtml(
                 getLeadId(lead)
               )}">Arrived</button>
@@ -689,9 +694,9 @@ const ROUTE_CONFIG = {
 
     Array.from(els.stopsList.querySelectorAll(".stop-card")).forEach((card) => {
       card.addEventListener("click", function () {
-        const leadId = normalizeString(card.getAttribute("data-lead-id"));
-        if (!leadId) return;
-        focusStopByLeadId(leadId);
+        const stopIndex = Number(card.getAttribute("data-stop-index"));
+        if (!Number.isFinite(stopIndex)) return;
+        focusStopByIndex(stopIndex);
       });
     });
 
