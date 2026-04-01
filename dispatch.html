@@ -20,6 +20,7 @@
       --dark: #2f4558;
       --selected-bg: #eef5ff;
       --selected-border: #2f7cf6;
+      --section-bg: #f8fbff;
     }
 
     * {
@@ -61,7 +62,7 @@
 
     h1 {
       margin: 0;
-      font-size: 26px;
+      font-size: 25px;
       line-height: 1.2;
     }
 
@@ -100,31 +101,31 @@
     .filter-card {
       border: none;
       border-radius: 18px;
-      padding: 18px 16px;
+      padding: 16px 14px;
       color: white;
       text-align: left;
       cursor: pointer;
       box-shadow: var(--shadow);
-      min-height: 108px;
+      min-height: 98px;
     }
 
     .filter-card .label {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       margin-bottom: 8px;
       opacity: 0.95;
     }
 
     .filter-card .count {
-      font-size: 30px;
+      font-size: 28px;
       font-weight: 800;
       line-height: 1;
       margin-bottom: 8px;
     }
 
     .filter-card .subtext {
-      font-size: 12px;
-      opacity: 0.9;
+      font-size: 11px;
+      opacity: 0.92;
       line-height: 1.35;
     }
 
@@ -145,12 +146,12 @@
       border-radius: 14px;
       background: white;
       color: var(--text);
-      padding: 14px 12px;
+      padding: 13px 12px;
       font-size: 14px;
       font-weight: 700;
       box-shadow: var(--shadow);
       cursor: pointer;
-      min-height: 48px;
+      min-height: 46px;
     }
 
     .control-btn.active {
@@ -192,6 +193,7 @@
     .panel-subtitle {
       font-size: 13px;
       color: var(--muted);
+      line-height: 1.45;
     }
 
     .route-build-grid {
@@ -209,7 +211,7 @@
     }
 
     .field-label {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
       color: var(--muted);
       text-transform: uppercase;
@@ -221,7 +223,7 @@
       width: 100%;
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 14px 12px;
+      padding: 13px 12px;
       background: #fff;
       color: var(--text);
       font-size: 14px;
@@ -241,12 +243,12 @@
       border-radius: 14px;
       background: #000;
       color: white;
-      padding: 16px 14px;
-      font-size: 15px;
+      padding: 15px 14px;
+      font-size: 14px;
       font-weight: 800;
       box-shadow: var(--shadow);
       cursor: pointer;
-      min-height: 52px;
+      min-height: 50px;
     }
 
     .optimize-btn:disabled {
@@ -260,7 +262,7 @@
 
     .selection-note {
       margin-top: 8px;
-      font-size: 13px;
+      font-size: 12px;
       color: var(--muted);
       text-align: center;
       min-height: 18px;
@@ -276,24 +278,60 @@
       border-radius: 14px;
       background: var(--success);
       color: white;
-      padding: 14px;
+      padding: 13px;
       font-size: 14px;
       font-weight: 800;
       box-shadow: var(--shadow);
       cursor: pointer;
-      min-height: 48px;
+      min-height: 46px;
+    }
+
+    .grouped-leads {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .day-section {
+      background: var(--section-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px;
+    }
+
+    .day-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .day-title {
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .day-count {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
 
     .lead-list {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
 
     .lead-card {
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 14px;
+      border-radius: 14px;
+      padding: 11px;
       background: #fff;
       transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
       cursor: pointer;
@@ -310,11 +348,11 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .lead-select-label {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
       color: var(--muted);
       text-transform: uppercase;
@@ -322,8 +360,8 @@
     }
 
     .lead-checkbox {
-      width: 18px;
-      height: 18px;
+      width: 17px;
+      height: 17px;
       accent-color: var(--today);
       pointer-events: none;
     }
@@ -332,23 +370,23 @@
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 8px;
+      gap: 10px;
+      margin-bottom: 7px;
     }
 
     .lead-name {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 800;
       line-height: 1.25;
     }
 
     .lead-badge {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.04em;
       border-radius: 999px;
-      padding: 6px 8px;
+      padding: 5px 7px;
       white-space: nowrap;
       color: white;
       background: var(--unrouted);
@@ -359,62 +397,69 @@
     }
 
     .lead-address {
-      font-size: 14px;
-      line-height: 1.4;
+      font-size: 13px;
+      line-height: 1.35;
       color: var(--text);
+      margin-bottom: 7px;
+    }
+
+    .lead-received {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
       margin-bottom: 8px;
     }
 
     .lead-meta {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 7px;
+      margin-bottom: 10px;
     }
 
     .meta-box {
       background: #f8fafc;
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px;
+      border-radius: 11px;
+      padding: 8px;
     }
 
     .meta-label {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
 
     .meta-value {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       line-height: 1.35;
     }
 
     .lead-score {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--muted);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .lead-actions {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
+      gap: 8px;
     }
 
     .action-btn {
       border: none;
-      border-radius: 12px;
-      padding: 14px 12px;
-      font-size: 14px;
+      border-radius: 11px;
+      padding: 12px 10px;
+      font-size: 13px;
       font-weight: 800;
       cursor: pointer;
-      min-height: 48px;
+      min-height: 42px;
     }
 
     .call-btn {
@@ -467,7 +512,7 @@
     }
 
     .route-step-meta {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--muted);
       margin-top: 4px;
       line-height: 1.4;
@@ -518,6 +563,14 @@
 
       .controls {
         flex-direction: column;
+      }
+
+      .day-section {
+        padding: 10px;
+      }
+
+      .lead-card {
+        padding: 10px;
       }
     }
   </style>
@@ -630,13 +683,13 @@
     <div class="panel">
       <div class="panel-header">
         <div>
-          <div id="panelTitle" class="panel-title">All Leads</div>
-          <div id="panelSubtitle" class="panel-subtitle">Showing all dispatch-ready leads</div>
+          <div id="panelTitle" class="panel-title">Incoming Leads</div>
+          <div id="panelSubtitle" class="panel-subtitle">Grouped by day received, then ordered by time received first.</div>
         </div>
       </div>
 
       <div id="errorBox" class="error" hidden></div>
-      <div id="leadList" class="lead-list"></div>
+      <div id="leadList" class="grouped-leads"></div>
     </div>
   </div>
 
