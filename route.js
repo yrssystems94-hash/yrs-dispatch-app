@@ -33,6 +33,7 @@ const ROUTE_CONFIG = {
   let markerLayer = null;
   let activeMarkersByLeadId = new Map();
   let fallbackMessageRendered = false;
+  let lastBoundsPoints = [];
 
   function normalizeString(value) {
     return typeof value === "string" ? value.trim() : "";
@@ -250,6 +251,7 @@ const ROUTE_CONFIG = {
   function buildGoogleMapsDirectionsUrl(route) {
     const stops = Array.isArray(route?.stops) ? route.stops : [];
     const startAddress = normalizeString(route?.startAddress);
+    const endMode = normalizeString(route?.endMode || "last");
 
     if (!stops.length) return "";
 
@@ -257,8 +259,14 @@ const ROUTE_CONFIG = {
     if (!addresses.length) return "";
 
     const origin = startAddress || addresses[0];
-    const destination = addresses[addresses.length - 1];
-    const waypoints = addresses.slice(0, -1);
+
+    let destination = addresses[addresses.length - 1];
+    let waypoints = addresses.slice(0, -1);
+
+    if (endMode === "round_trip") {
+      destination = origin;
+      waypoints = addresses;
+    }
 
     const url = new URL("https://www.google.com/maps/dir/");
     url.searchParams.set("api", "1");
@@ -270,6 +278,25 @@ const ROUTE_CONFIG = {
     }
 
     return url.toString();
+  }
+
+  function getMapPadding() {
+    return window.innerWidth <= 640 ? [18, 18] : [30, 30];
+  }
+
+  function invalidateAndRefitMap() {
+    if (!map) return;
+
+    setTimeout(() => {
+      if (!map) return;
+      map.invalidateSize();
+
+      if (lastBoundsPoints.length === 1) {
+        map.setView(lastBoundsPoints[0], 14);
+      } else if (lastBoundsPoints.length > 1) {
+        map.fitBounds(lastBoundsPoints, { padding: getMapPadding() });
+      }
+    }, 120);
   }
 
   function renderEmpty() {
@@ -315,6 +342,7 @@ const ROUTE_CONFIG = {
   function destroyMap() {
     activeMarkersByLeadId = new Map();
     fallbackMessageRendered = false;
+    lastBoundsPoints = [];
 
     if (map) {
       map.remove();
@@ -349,6 +377,10 @@ const ROUTE_CONFIG = {
 
     tileLayer.addTo(map);
     markerLayer = L.layerGroup().addTo(map);
+
+    requestAnimationFrame(() => {
+      invalidateAndRefitMap();
+    });
 
     return map;
   }
@@ -428,6 +460,7 @@ const ROUTE_CONFIG = {
     ).length;
     const groupedCount = stops.filter((stop) => Number(stop?.grouped_count || 1) > 1).length;
     const routeType = normalizeString(route?.type || "standard");
+    const endMode = normalizeString(route?.endMode || "last");
     const cityList = Array.from(
       new Set(stops.map((stop) => normalizeString(stop?.city)).filter(Boolean))
     );
@@ -444,6 +477,7 @@ const ROUTE_CONFIG = {
         `${stops.length} Stop${stops.length === 1 ? "" : "s"}`,
         `${urgentCount} Urgent`,
         `${doneCount} Done`,
+        endMode === "round_trip" ? "Round Trip" : "Last Location",
         groupedCount ? `${groupedCount} Multi-job Stop${groupedCount === 1 ? "" : "s"}` : null,
         cityList.length ? cityList.join(" / ") : null,
       ].filter(Boolean);
@@ -457,6 +491,7 @@ const ROUTE_CONFIG = {
   function renderMap(route) {
     const stops = Array.isArray(route?.stops) ? route.stops : [];
     const startPoint = getRouteStartPoint(route);
+    const endMode = normalizeString(route?.endMode || "last");
     const m = initMapIfNeeded();
 
     if (!m) return;
@@ -535,10 +570,15 @@ const ROUTE_CONFIG = {
       activeMarkersByLeadId.set(leadId, marker);
     });
 
-    const polylinePoints =
+    let polylinePoints =
       startPoint.lat !== null && startPoint.lng !== null
         ? [[startPoint.lat, startPoint.lng], ...linePoints]
-        : linePoints;
+        : [...linePoints];
+
+    if (endMode === "round_trip" && startPoint.lat !== null && startPoint.lng !== null) {
+      polylinePoints = [...polylinePoints, [startPoint.lat, startPoint.lng]];
+      boundsPoints.push([startPoint.lat, startPoint.lng]);
+    }
 
     if (polylinePoints.length >= 2) {
       routePolyline = L.polyline(polylinePoints, {
@@ -549,11 +589,15 @@ const ROUTE_CONFIG = {
       }).addTo(m);
     }
 
+    lastBoundsPoints = [...boundsPoints];
+
     if (boundsPoints.length === 1) {
       m.setView(boundsPoints[0], 14);
     } else {
-      m.fitBounds(boundsPoints, { padding: [30, 30] });
+      m.fitBounds(boundsPoints, { padding: getMapPadding() });
     }
+
+    invalidateAndRefitMap();
 
     if (els.mapNote) {
       const startSourceText =
@@ -565,9 +609,14 @@ const ROUTE_CONFIG = {
           ? "Custom start could not be mapped, so the view is anchored to the first stop area."
           : "Starting with your saved route start.";
 
+      const endModeText =
+        endMode === "round_trip"
+          ? "Route returns to the start point."
+          : "Route ends at the last stop.";
+
       els.mapNote.textContent = `${stopsWithCoords.length} mapped stop${
         stopsWithCoords.length === 1 ? "" : "s"
-      } rendered. ${startSourceText}`;
+      } rendered. ${startSourceText} ${endModeText}`;
     }
   }
 
@@ -832,6 +881,9 @@ const ROUTE_CONFIG = {
         renderRoute(route);
       });
     }
+
+    window.addEventListener("resize", invalidateAndRefitMap);
+    window.addEventListener("orientationchange", invalidateAndRefitMap);
   }
 
   function init() {
