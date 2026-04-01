@@ -25,6 +25,7 @@
       --dark: #2f4558;
       --today: #2f7cf6;
       --urgent: #d64545;
+      --edit: #7c3aed;
       --chip: #eef4ff;
       --chip-border: #dbe7ff;
       --map-panel-bg: #eef4ff;
@@ -40,7 +41,7 @@
     }
 
     .app {
-      max-width: 860px;
+      max-width: 980px;
       margin: 0 auto;
       padding: 16px;
     }
@@ -110,6 +111,10 @@
       gap: 10px;
     }
 
+    .actions.secondary {
+      margin-top: 10px;
+    }
+
     .btn {
       border: none;
       border-radius: 14px;
@@ -130,6 +135,7 @@
     .btn-success { background: var(--success); color: white; }
     .btn-danger { background: var(--danger); color: white; }
     .btn-dark { background: var(--dark); color: white; }
+    .btn-edit { background: var(--edit); color: white; }
 
     .route-selector-wrap {
       display: flex;
@@ -323,6 +329,7 @@
     .badge.urgent { background: var(--urgent); }
     .badge.arrived { background: #f39a2f; }
     .badge.done { background: var(--success); }
+    .badge.custom { background: var(--edit); }
 
     .stop-meta {
       font-size: 13px;
@@ -333,10 +340,34 @@
 
     .stop-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
       margin-top: 10px;
     }
+
+    .stop-edit-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .small-btn {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 10px;
+      min-height: 42px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+
+    .small-btn.primary { background: var(--today); color: white; }
+    .small-btn.success { background: var(--success); color: white; }
+    .small-btn.danger { background: var(--danger); color: white; }
+    .small-btn.dark { background: var(--dark); color: white; }
+    .small-btn.edit { background: var(--edit); color: white; }
 
     .empty-state {
       padding: 28px 14px;
@@ -366,6 +397,7 @@
     .yrs-stop-pin.urgent { background: var(--urgent); }
     .yrs-stop-pin.done { background: var(--success); }
     .yrs-stop-pin.arrived { background: #f39a2f; }
+    .yrs-stop-pin.custom { background: var(--edit); }
 
     .yrs-start-pin {
       display: flex;
@@ -389,8 +421,9 @@
 
     @media (max-width: 640px) {
       .actions,
+      .summary-grid,
       .stop-actions,
-      .summary-grid {
+      .stop-edit-actions {
         grid-template-columns: 1fr;
       }
 
@@ -404,7 +437,7 @@
       <div class="eyebrow">Your Roof Specialist</div>
       <h1>Current Route</h1>
       <div class="subtext">
-        Real local-area map view with numbered stops, live route flow, and route actions kept separate from your dispatch board.
+        Edit stops, add custom stops, and reoptimize without breaking your saved route flow.
       </div>
       <div id="statusBar" class="status"></div>
     </div>
@@ -425,13 +458,18 @@
           <button id="refreshRouteBtn" class="btn btn-success" type="button">Refresh Route Screen</button>
         </div>
 
+        <div class="actions secondary">
+          <button id="reoptimizeRouteBtn" class="btn btn-edit" type="button">Optimize Current Route</button>
+          <button id="addStopBtn" class="btn btn-edit" type="button">+ Add Stop</button>
+        </div>
+
         <div id="routeStats" class="stats-row"></div>
       </div>
 
       <div class="panel">
         <div class="panel-title">Route Summary</div>
         <div class="panel-subtitle">
-          Planned routes can be reviewed here and switched from the selector above.
+          Planned routes can be reviewed, edited, and reoptimized here.
         </div>
 
         <div class="summary-grid">
@@ -458,7 +496,7 @@
     <div class="panel">
       <div class="panel-title">Local Route Map</div>
       <div class="panel-subtitle">
-        Numbered stop pins and route line centered on your selected start area when available.
+        Mobile map view is forced to refit after layout changes so it stays centered on your real route area.
       </div>
 
       <div class="map-shell">
@@ -473,6 +511,7 @@
               <div class="legend-chip">Green = Start</div>
               <div class="legend-chip">Blue = Standard Stop</div>
               <div class="legend-chip">Red = Urgent Stop</div>
+              <div class="legend-chip">Purple = Custom Stop</div>
             </div>
           </div>
         </div>
@@ -484,7 +523,7 @@
     <div class="panel">
       <div class="panel-title">Stops</div>
       <div class="panel-subtitle">
-        Route execution tools stay below the map so the top stays visual and clean.
+        Use move, remove, add-stop, and reoptimize controls here.
       </div>
       <div id="stopsList" class="stops"></div>
     </div>
