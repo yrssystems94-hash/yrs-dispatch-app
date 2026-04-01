@@ -96,38 +96,57 @@ const ROUTE_CONFIG = {
   }
 
   function getActiveRoute() {
-    const activeRouteId = getActiveRouteId();
     const routes = getRoutes();
+    const activeRouteId = getActiveRouteId();
 
-    if (!activeRouteId) return routes.length ? routes[routes.length - 1] : null;
-    return routes.find((route) => normalizeString(route.id) === activeRouteId) || null;
+    if (!routes.length) {
+      clearActiveRouteId();
+      return null;
+    }
+
+    if (activeRouteId) {
+      const found = routes.find(
+        (route) => normalizeString(route.id) === normalizeString(activeRouteId)
+      );
+
+      if (found) {
+        return found;
+      }
+    }
+
+    setActiveRouteId(routes[0].id);
+    return routes[0];
   }
 
   function saveRoute(updatedRoute) {
-    const routes = getRoutes().map((route) =>
+    const routes = getRoutes();
+    const nextRoutes = routes.map((route) =>
       normalizeString(route.id) === normalizeString(updatedRoute.id)
         ? updatedRoute
         : route
     );
-    setRoutes(routes);
+    setRoutes(nextRoutes);
     setActiveRouteId(updatedRoute.id);
   }
 
   function removeRouteFromStorage(routeId) {
+    const cleanRouteId = normalizeString(routeId);
     const nextRoutes = getRoutes().filter(
-      (route) => normalizeString(route.id) !== normalizeString(routeId)
+      (route) => normalizeString(route.id) !== cleanRouteId
     );
 
     setRoutes(nextRoutes);
 
     const activeRouteId = getActiveRouteId();
-    if (activeRouteId === normalizeString(routeId)) {
+    if (activeRouteId === cleanRouteId) {
       if (nextRoutes.length) {
-        setActiveRouteId(nextRoutes[nextRoutes.length - 1].id);
+        setActiveRouteId(nextRoutes[0].id);
       } else {
         clearActiveRouteId();
       }
     }
+
+    return nextRoutes;
   }
 
   function getLeadId(lead) {
@@ -268,7 +287,12 @@ const ROUTE_CONFIG = {
     const json = await response.json().catch(() => null);
 
     if (!response.ok || !json || json.success !== true) {
-      throw new Error(json?.details || json?.error || json?.message || `POST failed: ${path}`);
+      const error = new Error(
+        json?.details || json?.error || json?.message || `POST failed: ${path}`
+      );
+      error.status = response.status;
+      error.payload = json;
+      throw error;
     }
 
     return json;
@@ -364,6 +388,14 @@ const ROUTE_CONFIG = {
     setTimeout(refit, 760);
   }
 
+  function paintReoptimizeButton() {
+    if (!els.reoptimizeRouteBtn) return;
+    els.reoptimizeRouteBtn.textContent = "Reoptimize Route";
+    els.reoptimizeRouteBtn.style.background = "#f4c542";
+    els.reoptimizeRouteBtn.style.color = "#14212f";
+    els.reoptimizeRouteBtn.style.border = "none";
+  }
+
   function renderEmpty() {
     if (els.routeMap) {
       els.routeMap.innerHTML = `
@@ -395,6 +427,7 @@ const ROUTE_CONFIG = {
     }
 
     destroyMap();
+    clearActiveRouteId();
     setStatus("No active route loaded.");
   }
 
@@ -516,11 +549,8 @@ const ROUTE_CONFIG = {
 
   function updateReoptimizeButton(route) {
     if (!els.reoptimizeRouteBtn) return;
-    const edited = route?.wasEdited === true;
-    els.reoptimizeRouteBtn.textContent = edited
-      ? "Reoptimize Route"
-      : "Optimize Current Route";
     els.reoptimizeRouteBtn.disabled = false;
+    paintReoptimizeButton();
   }
 
   function renderRouteStats(route) {
@@ -715,7 +745,10 @@ const ROUTE_CONFIG = {
           isCustomStop(lead) ? "Custom stop" : "N/A"
         );
         const priority = formatDisplay(lead?.priority, isCustomStop(lead) ? "Custom" : "N/A");
-        const preferredTime = formatDisplay(lead?.preferred_time, isCustomStop(lead) ? "Manual stop" : "N/A");
+        const preferredTime = formatDisplay(
+          lead?.preferred_time,
+          isCustomStop(lead) ? "Manual stop" : "N/A"
+        );
         const phone = formatDisplay(lead?.phone, "");
         const routeStatus = normalizeString(lead?.route_status || "routed");
         const groupedCount = Number(lead?.grouped_count || 1);
@@ -752,14 +785,13 @@ const ROUTE_CONFIG = {
 
             <div class="stop-edit-actions">
               <button class="small-btn danger" type="button" data-done="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Done</button>
-              <button class="small-btn edit" type="button" data-move-up="${index}" ${index === 0 ? "disabled" : ""}>Move Up</button>
-              <button class="small-btn edit" type="button" data-move-down="${index}" ${index === stops.length - 1 ? "disabled" : ""}>Move Down</button>
+              <button class="small-btn success" type="button" data-move-up="${index}" ${index === 0 ? "disabled" : ""}>Move Up</button>
+              <button class="small-btn success" type="button" data-move-down="${index}" ${index === stops.length - 1 ? "disabled" : ""}>Move Down</button>
             </div>
 
             <div class="stop-edit-actions">
-              <button class="small-btn edit" type="button" data-remove-stop="${index}">Remove</button>
-              <button class="small-btn edit" type="button" data-focus-stop="${index}">Focus</button>
-              <button class="small-btn edit" type="button" data-add-after="${index}">+ Add After</button>
+              <button class="small-btn danger" type="button" data-remove-stop="${index}">Remove</button>
+              <button class="small-btn primary" type="button" data-add-after="${index}">+ Add After</button>
             </div>
           </div>
         `;
@@ -834,14 +866,6 @@ const ROUTE_CONFIG = {
         event.stopPropagation();
         const index = Number(btn.getAttribute("data-remove-stop"));
         await removeStop(index);
-      });
-    });
-
-    Array.from(els.stopsList.querySelectorAll("[data-focus-stop]")).forEach((btn) => {
-      btn.addEventListener("click", function (event) {
-        event.stopPropagation();
-        const index = Number(btn.getAttribute("data-focus-stop"));
-        focusStopByIndex(index);
       });
     });
 
@@ -1094,7 +1118,7 @@ const ROUTE_CONFIG = {
     const cleanAddress = normalizeString(address);
     if (!cleanAddress) return;
 
-    let geocoded = await geocodeAddress(cleanAddress);
+    const geocoded = await geocodeAddress(cleanAddress);
 
     const newStop = {
       custom_id: `custom_stop_${Date.now()}`,
@@ -1128,7 +1152,6 @@ const ROUTE_CONFIG = {
     const routeId = normalizeString(route?.id);
 
     if (!routeId) {
-      removeRouteFromStorage(routeId);
       renderEmpty();
       return;
     }
@@ -1140,19 +1163,33 @@ const ROUTE_CONFIG = {
 
     try {
       await postJson("/api/route/delete", { route_id: routeId });
-      removeRouteFromStorage(routeId);
+    } catch (error) {
+      console.error("Delete route backend warning:", error);
 
+      const isStaleNotFound =
+        error?.status === 404 ||
+        /not found/i.test(error?.message || "");
+
+      if (!isStaleNotFound) {
+        setStatus("Could not delete route. Please try again.");
+        window.alert("Failed to delete route and restore jobs.");
+        return;
+      }
+    }
+
+    const nextRoutes = removeRouteFromStorage(routeId);
+
+    if (nextRoutes.length) {
       const nextRoute = getActiveRoute();
       if (nextRoute) {
         renderRoute(nextRoute);
-      } else {
-        window.location.href = "./dispatch.html";
+        setStatus("Old route removed.");
+        return;
       }
-    } catch (error) {
-      console.error("Failed to delete route:", error);
-      setStatus("Could not delete route. Please try again.");
-      window.alert("Failed to delete route and restore jobs.");
     }
+
+    renderEmpty();
+    window.location.href = "./dispatch.html";
   }
 
   function bindEvents() {
@@ -1222,6 +1259,7 @@ const ROUTE_CONFIG = {
 
   function init() {
     renderRouteSelector();
+    paintReoptimizeButton();
 
     const route = getActiveRoute();
     if (!route) {
