@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YRS Route</title>
+  <link rel="icon" href="/favicon.ico" />
 
   <link
     rel="stylesheet"
@@ -29,9 +30,7 @@
       --map-panel-bg: #eef4ff;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -46,9 +45,7 @@
       padding: 16px;
     }
 
-    .header {
-      margin-bottom: 16px;
-    }
+    .header { margin-bottom: 16px; }
 
     .eyebrow {
       font-size: 12px;
@@ -122,38 +119,17 @@
       cursor: pointer;
       min-height: 50px;
       box-shadow: var(--shadow);
-      transition: transform 0.12s ease, opacity 0.12s ease;
-    }
-
-    .btn:hover {
-      transform: translateY(-1px);
     }
 
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
-      transform: none;
     }
 
-    .btn-primary {
-      background: var(--today);
-      color: white;
-    }
-
-    .btn-success {
-      background: var(--success);
-      color: white;
-    }
-
-    .btn-danger {
-      background: var(--danger);
-      color: white;
-    }
-
-    .btn-dark {
-      background: var(--dark);
-      color: white;
-    }
+    .btn-primary { background: var(--today); color: white; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-dark { background: var(--dark); color: white; }
 
     .route-selector-wrap {
       display: flex;
@@ -301,7 +277,6 @@
       border-radius: 18px;
       padding: 14px;
       background: #fff;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     }
 
     .stop-card.active {
@@ -345,17 +320,9 @@
       background: var(--dark);
     }
 
-    .badge.urgent {
-      background: var(--urgent);
-    }
-
-    .badge.arrived {
-      background: #f39a2f;
-    }
-
-    .badge.done {
-      background: var(--success);
-    }
+    .badge.urgent { background: var(--urgent); }
+    .badge.arrived { background: #f39a2f; }
+    .badge.done { background: var(--success); }
 
     .stop-meta {
       font-size: 13px;
@@ -379,9 +346,7 @@
       line-height: 1.5;
     }
 
-    .leaflet-container {
-      font: inherit;
-    }
+    .leaflet-container { font: inherit; }
 
     .yrs-stop-pin {
       display: flex;
@@ -398,17 +363,9 @@
       box-shadow: 0 6px 16px rgba(20, 33, 47, 0.18);
     }
 
-    .yrs-stop-pin.urgent {
-      background: var(--urgent);
-    }
-
-    .yrs-stop-pin.done {
-      background: var(--success);
-    }
-
-    .yrs-stop-pin.arrived {
-      background: #f39a2f;
-    }
+    .yrs-stop-pin.urgent { background: var(--urgent); }
+    .yrs-stop-pin.done { background: var(--success); }
+    .yrs-stop-pin.arrived { background: #f39a2f; }
 
     .yrs-start-pin {
       display: flex;
@@ -427,9 +384,7 @@
     }
 
     @media (max-width: 760px) {
-      .top-grid {
-        grid-template-columns: 1fr;
-      }
+      .top-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 640px) {
@@ -439,9 +394,7 @@
         grid-template-columns: 1fr;
       }
 
-      #routeMap {
-        height: 300px;
-      }
+      #routeMap { height: 300px; }
     }
   </style>
 </head>
@@ -459,7 +412,7 @@
     <div class="top-grid">
       <div class="panel">
         <div class="route-selector-wrap">
-          <label for="routeSelector" class="route-selector-label">Active Route</label>
+          <label for="routeSelector" class="route-selector-label">Saved Routes</label>
           <select id="routeSelector" class="route-selector">
             <option value="">No routes</option>
           </select>
@@ -478,7 +431,7 @@
       <div class="panel">
         <div class="panel-title">Route Summary</div>
         <div class="panel-subtitle">
-          Clean summary only — route value block removed from above the action buttons.
+          Planned routes can be reviewed here and switched from the selector above.
         </div>
 
         <div class="summary-grid">
