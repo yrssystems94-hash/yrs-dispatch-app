@@ -68,6 +68,16 @@ const DISPATCH_CONFIG = {
       .replace(/"/g, "&quot;");
   }
 
+  function uniqueStrings(values) {
+    return Array.from(
+      new Set(
+        (Array.isArray(values) ? values : [])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      )
+    );
+  }
+
   function getApiUrl(path) {
     return `${DISPATCH_CONFIG.apiBaseUrl}${path}`;
   }
@@ -779,6 +789,19 @@ const DISPATCH_CONFIG = {
     renderLeads(state.allLeads);
   }
 
+  function buildDeletePayloadFromLeads(leads) {
+    const safeLeads = Array.isArray(leads) ? leads : [];
+    const leadIds = uniqueStrings(safeLeads.map(getLeadId));
+    const businessIds = uniqueStrings(safeLeads.map(getLeadBusinessId));
+    const dbIds = uniqueStrings(safeLeads.map(getLeadDbId));
+
+    return {
+      leadIds,
+      lead_ids: businessIds,
+      ids: dbIds,
+    };
+  }
+
   function buildLeadCardHtml(lead) {
     const firstName = formatDisplay(lead?.first_name, "");
     const lastName = formatDisplay(lead?.last_name, "");
@@ -937,25 +960,19 @@ const DISPATCH_CONFIG = {
           return;
         }
 
-        const dbId = getLeadDbId(lead);
-        const businessId = getLeadBusinessId(lead);
-
         const confirmed = window.confirm(
           "Delete this lead permanently? This cannot be undone."
         );
         if (!confirmed) return;
 
         try {
-          const deletePayload = {
-            leadIds: [clickedLeadId],
-            lead_ids: businessId ? [businessId] : [],
-            ids: dbId ? [dbId] : [],
+          const basePayload = buildDeletePayloadFromLeads([lead]);
+          const result = await postJson("/api/delete-leads", {
+            ...basePayload,
             leadId: clickedLeadId,
-            lead_id: businessId || clickedLeadId,
-            id: dbId || clickedLeadId,
-          };
-
-          const result = await postJson("/api/delete-leads", deletePayload);
+            lead_id: getLeadBusinessId(lead) || clickedLeadId,
+            id: getLeadDbId(lead) || clickedLeadId,
+          });
 
           if (Number(result?.deleted || 0) < 1) {
             throw new Error(
@@ -1267,8 +1284,10 @@ const DISPATCH_CONFIG = {
 
     const leadsToDelete = state.allLeads.filter((lead) => ids.includes(getLeadId(lead)));
 
-    const dbIds = leadsToDelete.map(getLeadDbId).filter(Boolean);
-    const businessIds = leadsToDelete.map(getLeadBusinessId).filter(Boolean);
+    if (!leadsToDelete.length) {
+      window.alert("Could not find the selected leads in the current list.");
+      return;
+    }
 
     const confirmed = window.confirm(
       `Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"} permanently?`
@@ -1276,11 +1295,10 @@ const DISPATCH_CONFIG = {
     if (!confirmed) return;
 
     try {
-      const result = await postJson("/api/delete-leads", {
-        leadIds: ids,
-        lead_ids: businessIds,
-        ids: dbIds,
-      });
+      const result = await postJson(
+        "/api/delete-leads",
+        buildDeletePayloadFromLeads(leadsToDelete)
+      );
 
       if (Number(result?.deleted || 0) < 1) {
         throw new Error(
