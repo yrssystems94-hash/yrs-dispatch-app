@@ -18,8 +18,6 @@ const ROUTE_CONFIG = {
     stopsList: document.getElementById("stopsList"),
     statusBar: document.getElementById("statusBar"),
     routeSelector: document.getElementById("routeSelector"),
-    routeLabelValue: document.getElementById("routeLabelValue"),
-    startAddressValue: document.getElementById("startAddressValue"),
     stopCountValue: document.getElementById("stopCountValue"),
     urgentCountValue: document.getElementById("urgentCountValue"),
     doneCountValue: document.getElementById("doneCountValue"),
@@ -300,8 +298,6 @@ const ROUTE_CONFIG = {
       els.routeSelector.disabled = true;
     }
 
-    if (els.routeLabelValue) els.routeLabelValue.textContent = "—";
-    if (els.startAddressValue) els.startAddressValue.textContent = "—";
     if (els.stopCountValue) els.stopCountValue.textContent = "0";
     if (els.urgentCountValue) els.urgentCountValue.textContent = "0";
     if (els.doneCountValue) els.doneCountValue.textContent = "0";
@@ -419,9 +415,7 @@ const ROUTE_CONFIG = {
           normalizeString(route.id) === normalizeString(activeRouteId)
             ? "selected"
             : "";
-        return `<option value="${escapeHtml(route.id)}" ${selected}>${escapeHtml(
-          label
-        )}</option>`;
+        return `<option value="${escapeHtml(route.id)}" ${selected}>${escapeHtml(label)}</option>`;
       })
       .join("");
   }
@@ -435,19 +429,14 @@ const ROUTE_CONFIG = {
     const groupedCount = stops.filter((stop) => Number(stop?.grouped_count || 1) > 1).length;
     const routeType = normalizeString(route?.type || "standard");
     const cityList = Array.from(
-      new Set(
-        stops
-          .map((stop) => normalizeString(stop?.city))
-          .filter(Boolean)
-      )
+      new Set(stops.map((stop) => normalizeString(stop?.city)).filter(Boolean))
     );
 
     if (els.stopCountValue) els.stopCountValue.textContent = String(stops.length);
     if (els.urgentCountValue) els.urgentCountValue.textContent = String(urgentCount);
     if (els.doneCountValue) els.doneCountValue.textContent = String(doneCount);
     if (els.routeTypeValue) {
-      els.routeTypeValue.textContent =
-        routeType === "emergency" ? "Emergency" : "Standard";
+      els.routeTypeValue.textContent = routeType === "emergency" ? "Emergency" : "Standard";
     }
 
     if (els.routeStats) {
@@ -463,22 +452,6 @@ const ROUTE_CONFIG = {
         .map((chip) => `<div class="stat-chip">${escapeHtml(chip)}</div>`)
         .join("");
     }
-  }
-
-  function renderMeta(route) {
-    const label =
-      normalizeString(route?.label) ||
-      `Route - ${new Date(route?.createdAt || Date.now()).toLocaleString()}`;
-
-    if (els.routeLabelValue) {
-      els.routeLabelValue.textContent = label;
-    }
-
-    if (els.startAddressValue) {
-      els.startAddressValue.textContent = normalizeString(route?.startAddress) || "Not set";
-    }
-
-    renderRouteStats(route);
   }
 
   function renderMap(route) {
@@ -527,9 +500,7 @@ const ROUTE_CONFIG = {
         icon: createStartIcon(),
         zIndexOffset: 1000,
       }).bindPopup(
-        `<strong>Start</strong><br>${escapeHtml(
-          startPoint.address || "Selected starting point"
-        )}`
+        `<strong>Start</strong><br>${escapeHtml(startPoint.address || "Selected starting point")}`
       );
 
       markerLayer.addLayer(startMarker);
@@ -586,13 +557,13 @@ const ROUTE_CONFIG = {
 
     if (els.mapNote) {
       const startSourceText =
-        startPoint.source === "home"
-          ? "Starting at home base."
-          : startPoint.source === "custom_geocoded"
-          ? "Starting at your chosen custom location."
+        startPoint.source === "home" || startPoint.source === "home_fallback"
+          ? "Starting at home address."
+          : startPoint.source === "first_selected"
+          ? "Starting at the first selected address."
           : startPoint.source === "first_stop_fallback"
           ? "Custom start could not be mapped, so the view is anchored to the first stop area."
-          : "Live route map loaded.";
+          : "Starting with your saved route start.";
 
       els.mapNote.textContent = `${stopsWithCoords.length} mapped stop${
         stopsWithCoords.length === 1 ? "" : "s"
@@ -626,9 +597,7 @@ const ROUTE_CONFIG = {
         const routeStatus = normalizeString(lead?.route_status || "routed");
         const groupedCount = Number(lead?.grouped_count || 1);
         const hasMap = hasCoordinates(lead) || Boolean(address);
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          address
-        )}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
         return `
           <div class="stop-card" data-lead-id="${escapeHtml(getLeadId(lead))}">
@@ -644,8 +613,8 @@ const ROUTE_CONFIG = {
 
             <div class="stop-meta">
               ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-          preferredTime
-        )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
+                preferredTime
+              )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
             </div>
 
             <div class="stop-meta">
@@ -653,12 +622,10 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-actions">
-              <button class="btn btn-success" type="button" data-phone="${escapeHtml(
-                phone
-              )}">Call</button>
-              <button class="btn btn-primary" type="button" data-map="${escapeHtml(
-                mapsUrl
-              )}" ${hasMap ? "" : "disabled"}>Map</button>
+              <button class="btn btn-success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
+              <button class="btn btn-primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${
+                hasMap ? "" : "disabled"
+              }>Map</button>
               <button class="btn btn-dark" type="button" data-arrived="${escapeHtml(
                 getLeadId(lead)
               )}">Arrived</button>
@@ -736,7 +703,7 @@ const ROUTE_CONFIG = {
     }
 
     renderRouteSelector();
-    renderMeta(route);
+    renderRouteStats(route);
     renderMap(route);
     renderStops(route);
 
