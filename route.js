@@ -1058,8 +1058,13 @@ const ROUTE_CONFIG = {
     const route = getActiveRoute();
     if (!route) return;
 
-    const stops = await ensureStopsHaveCoordinates(route.stops || []);
+    let stops = await ensureStopsHaveCoordinates(route.stops || []);
     if (!stops.length) return;
+
+    saveRoute({
+      ...route,
+      stops,
+    });
 
     const start = getRouteStartPoint({
       ...route,
@@ -1070,8 +1075,14 @@ const ROUTE_CONFIG = {
     const withoutCoords = stops.filter((stop) => !hasCoordinates(stop));
 
     if (!withCoords.length) {
-      updateRouteStops(route, stops);
-      setStatus("Route saved, but there were not enough coordinates to reoptimize order.");
+      const fallbackSorted = [...stops].sort((a, b) => {
+        const aAddr = getLeadAddress(a).toLowerCase();
+        const bAddr = getLeadAddress(b).toLowerCase();
+        return aAddr.localeCompare(bAddr);
+      });
+
+      updateRouteStops(route, fallbackSorted);
+      setStatus("Route reoptimized (fallback mode).");
       return;
     }
 
@@ -1093,183 +1104,4 @@ const ROUTE_CONFIG = {
         });
         if (distance < bestDistance) {
           bestDistance = distance;
-          bestIndex = index;
-        }
-      });
-
-      const [nextStop] = remaining.splice(bestIndex, 1);
-      ordered.push(nextStop);
-      currentPoint = {
-        lat: getLat(nextStop),
-        lng: getLng(nextStop),
-      };
-    }
-
-    const nextStops = [...ordered, ...withoutCoords];
-    updateRouteStops(route, nextStops);
-    setStatus("Route reoptimized.");
-  }
-
-  async function addCustomStop(insertAtIndex = null) {
-    const route = getActiveRoute();
-    if (!route) return;
-
-    const address = window.prompt("Enter the stop address:");
-    const cleanAddress = normalizeString(address);
-    if (!cleanAddress) return;
-
-    const geocoded = await geocodeAddress(cleanAddress);
-
-    const newStop = {
-      custom_id: `custom_stop_${Date.now()}`,
-      is_custom: true,
-      full_address: geocoded?.address || cleanAddress,
-      property_address: geocoded?.address || cleanAddress,
-      city: "",
-      province: "",
-      postal_code: "",
-      service_type: "Custom stop",
-      priority: "Custom",
-      preferred_time: "",
-      route_status: "routed",
-      lat: geocoded?.lat ?? null,
-      lng: geocoded?.lng ?? null,
-    };
-
-    const stops = [...(route.stops || [])];
-    const insertIndex =
-      Number.isInteger(insertAtIndex) && insertAtIndex >= 0 && insertAtIndex <= stops.length
-        ? insertAtIndex
-        : stops.length;
-
-    stops.splice(insertIndex, 0, newStop);
-    updateRouteStops(route, stops);
-    setStatus("Custom stop added.");
-  }
-
-  async function deleteRoute() {
-    const route = getActiveRoute();
-    const routeId = normalizeString(route?.id);
-
-    if (!routeId) {
-      renderEmpty();
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "Delete this route and return all routed jobs back to the dashboard?"
-    );
-    if (!confirmed) return;
-
-    try {
-      await postJson("/api/route/delete", { route_id: routeId });
-    } catch (error) {
-      console.error("Delete route backend warning:", error);
-
-      const isStaleNotFound =
-        error?.status === 404 ||
-        /not found/i.test(error?.message || "");
-
-      if (!isStaleNotFound) {
-        setStatus("Could not delete route. Please try again.");
-        window.alert("Failed to delete route and restore jobs.");
-        return;
-      }
-    }
-
-    const nextRoutes = removeRouteFromStorage(routeId);
-
-    if (nextRoutes.length) {
-      const nextRoute = getActiveRoute();
-      if (nextRoute) {
-        renderRoute(nextRoute);
-        setStatus("Old route removed.");
-        return;
-      }
-    }
-
-    renderEmpty();
-    window.location.href = "./dispatch.html";
-  }
-
-  function bindEvents() {
-    if (els.backToDashboardBtn) {
-      els.backToDashboardBtn.addEventListener("click", function () {
-        window.location.href = "./dispatch.html";
-      });
-    }
-
-    if (els.refreshRouteBtn) {
-      els.refreshRouteBtn.addEventListener("click", function () {
-        init();
-      });
-    }
-
-    if (els.deleteRouteBtn) {
-      els.deleteRouteBtn.addEventListener("click", deleteRoute);
-    }
-
-    if (els.addStopBtn) {
-      els.addStopBtn.addEventListener("click", async function () {
-        await addCustomStop();
-      });
-    }
-
-    if (els.reoptimizeRouteBtn) {
-      els.reoptimizeRouteBtn.addEventListener("click", async function () {
-        await reoptimizeCurrentRoute();
-      });
-    }
-
-    if (els.openFullRouteBtn) {
-      els.openFullRouteBtn.addEventListener("click", function () {
-        const route = getActiveRoute();
-        const url = buildGoogleMapsDirectionsUrl(route);
-
-        if (!url) {
-          window.alert("Could not build Google Maps route.");
-          return;
-        }
-
-        window.open(url, "_blank", "noopener,noreferrer");
-      });
-    }
-
-    if (els.routeSelector) {
-      els.routeSelector.addEventListener("change", function () {
-        const routeId = normalizeString(els.routeSelector.value);
-        if (!routeId) return;
-
-        setActiveRouteId(routeId);
-        const route = getActiveRoute();
-
-        if (!route) {
-          renderEmpty();
-          return;
-        }
-
-        renderRoute(route);
-      });
-    }
-
-    window.addEventListener("resize", invalidateAndRefitMap);
-    window.addEventListener("orientationchange", invalidateAndRefitMap);
-    window.addEventListener("pageshow", invalidateAndRefitMap);
-  }
-
-  function init() {
-    renderRouteSelector();
-    paintReoptimizeButton();
-
-    const route = getActiveRoute();
-    if (!route) {
-      renderEmpty();
-      return;
-    }
-
-    renderRoute(route);
-  }
-
-  bindEvents();
-  init();
-})();
+         
