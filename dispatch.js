@@ -75,6 +75,14 @@ const DISPATCH_CONFIG = {
     return normalizeString(lead?.lead_id) || normalizeString(lead?.id);
   }
 
+  function getLeadDbId(lead) {
+    return normalizeString(lead?.id);
+  }
+
+  function getLeadBusinessId(lead) {
+    return normalizeString(lead?.lead_id);
+  }
+
   function getLeadAddress(lead) {
     return (
       normalizeString(lead?.property_address) ||
@@ -106,8 +114,8 @@ const DISPATCH_CONFIG = {
 
   function getLeadTimestamp(lead) {
     const raw =
-      normalizeString(lead?.submitted_at) ||
       normalizeString(lead?.received_at) ||
+      normalizeString(lead?.submitted_at) ||
       "";
 
     if (!raw) return null;
@@ -156,10 +164,20 @@ const DISPATCH_CONFIG = {
       const value = date.toISOString().slice(0, 10);
       const label =
         i === 0
-          ? `Today - ${date.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" })}`
-          : date.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" });
+          ? `Today - ${date.toLocaleDateString("en-CA", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            })}`
+          : date.toLocaleDateString("en-CA", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            });
 
-      options.push(`<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`);
+      options.push(
+        `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`
+      );
     }
 
     els.routeDaySelect.innerHTML = options.join("");
@@ -174,7 +192,12 @@ const DISPATCH_CONFIG = {
       if (!aDate) return 1;
       if (!bDate) return -1;
 
-      return aDate.getTime() - bDate.getTime();
+      const timeDiff = aDate.getTime() - bDate.getTime();
+      if (timeDiff !== 0) return timeDiff;
+
+      const aId = getLeadId(a);
+      const bId = getLeadId(b);
+      return aId.localeCompare(bId);
     });
   }
 
@@ -276,7 +299,10 @@ const DISPATCH_CONFIG = {
   }
 
   function getPlannedDay() {
-    return normalizeString(els.routeDaySelect?.value) || new Date().toISOString().slice(0, 10);
+    return (
+      normalizeString(els.routeDaySelect?.value) ||
+      new Date().toISOString().slice(0, 10)
+    );
   }
 
   function getHomeStartCoords() {
@@ -291,7 +317,9 @@ const DISPATCH_CONFIG = {
   }
 
   function getSelectedLeadsInCurrentOrder() {
-    return state.allLeads.filter((lead) => state.selectedLeadIds.includes(getLeadId(lead)));
+    return state.allLeads.filter((lead) =>
+      state.selectedLeadIds.includes(getLeadId(lead))
+    );
   }
 
   function getStartAddressFromSelectedFirst() {
@@ -360,7 +388,8 @@ const DISPATCH_CONFIG = {
 
   function updateStartInputUi() {
     if (!els.startModeSelect || !els.customStartInput) return;
-    els.customStartInput.hidden = normalizeString(els.startModeSelect.value) !== "custom";
+    els.customStartInput.hidden =
+      normalizeString(els.startModeSelect.value) !== "custom";
   }
 
   function setStatus(message) {
@@ -384,15 +413,22 @@ const DISPATCH_CONFIG = {
   function setLoadingButtons() {
     const busy = state.isLoadingCounts || state.isLoadingLeads;
 
-    [els.refreshBtn, els.optimizeBtn, els.emergencyOptimizeBtn, els.batchDeleteBtn].forEach((btn) => {
-      if (!btn) return;
-      btn.disabled = busy;
-    });
+    [els.refreshBtn, els.optimizeBtn, els.emergencyOptimizeBtn, els.batchDeleteBtn].forEach(
+      (btn) => {
+        if (!btn) return;
+        btn.disabled = busy;
+      }
+    );
 
     if (els.refreshBtn) els.refreshBtn.textContent = busy ? "Loading..." : "Refresh";
-    if (els.optimizeBtn) els.optimizeBtn.textContent = busy ? "Loading..." : "Optimize Route";
-    if (els.emergencyOptimizeBtn) els.emergencyOptimizeBtn.textContent = busy ? "Loading..." : "Emergency Optimize";
-    if (els.batchDeleteBtn) els.batchDeleteBtn.textContent = busy ? "Loading..." : "Delete Selected";
+    if (els.optimizeBtn)
+      els.optimizeBtn.textContent = busy ? "Loading..." : "Optimize Route";
+    if (els.emergencyOptimizeBtn)
+      els.emergencyOptimizeBtn.textContent = busy
+        ? "Loading..."
+        : "Emergency Optimize";
+    if (els.batchDeleteBtn)
+      els.batchDeleteBtn.textContent = busy ? "Loading..." : "Delete Selected";
   }
 
   function getFilterQuery(filterKey) {
@@ -449,10 +485,13 @@ const DISPATCH_CONFIG = {
       card.style.outlineOffset = isActive ? "2px" : "0";
     });
 
-    if (els.showAllBtn) els.showAllBtn.classList.toggle("active", !state.activeFilter);
-    if (els.clearFilterBtn) els.clearFilterBtn.classList.toggle("active", Boolean(state.activeFilter));
+    if (els.showAllBtn)
+      els.showAllBtn.classList.toggle("active", !state.activeFilter);
+    if (els.clearFilterBtn)
+      els.clearFilterBtn.classList.toggle("active", Boolean(state.activeFilter));
     if (els.panelTitle) els.panelTitle.textContent = getFilterTitle(state.activeFilter);
-    if (els.panelSubtitle) els.panelSubtitle.textContent = getFilterSubtitle(state.activeFilter);
+    if (els.panelSubtitle)
+      els.panelSubtitle.textContent = getFilterSubtitle(state.activeFilter);
   }
 
   async function fetchJson(path) {
@@ -462,9 +501,12 @@ const DISPATCH_CONFIG = {
       cache: "no-store",
     });
 
-    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
 
     const json = await response.json();
+
     if (!json || json.success !== true) {
       throw new Error(json?.error || "Request did not return success");
     }
@@ -482,7 +524,9 @@ const DISPATCH_CONFIG = {
     const json = await response.json().catch(() => null);
 
     if (!response.ok || !json || json.success !== true) {
-      throw new Error(json?.error || `POST failed: ${path}`);
+      throw new Error(
+        json?.details || json?.error || json?.message || `POST failed: ${path}`
+      );
     }
 
     return json;
@@ -542,7 +586,8 @@ const DISPATCH_CONFIG = {
   }
 
   function isLeadOverdue(lead) {
-    const submittedAt = normalizeString(lead?.submitted_at) || normalizeString(lead?.received_at);
+    const submittedAt =
+      normalizeString(lead?.submitted_at) || normalizeString(lead?.received_at);
     if (!submittedAt) return false;
 
     const parsed = new Date(submittedAt);
@@ -590,7 +635,8 @@ const DISPATCH_CONFIG = {
     const routeStatus = normalizeString(lead?.route_status) || "unrouted";
 
     if (priority.toLowerCase().includes("urgent")) return "Urgent";
-    if (normalizeString(lead?.service_type).toLowerCase().includes("emergency")) return "Emergency";
+    if (normalizeString(lead?.service_type).toLowerCase().includes("emergency"))
+      return "Emergency";
 
     return routeStatus;
   }
@@ -616,7 +662,9 @@ const DISPATCH_CONFIG = {
 
   function dedupeSelectedLeadIds(leadIds) {
     const seen = new Set();
-    const selectedLeads = state.allLeads.filter((lead) => leadIds.includes(getLeadId(lead)));
+    const selectedLeads = state.allLeads.filter((lead) =>
+      leadIds.includes(getLeadId(lead))
+    );
 
     return selectedLeads
       .filter((lead) => {
@@ -634,7 +682,9 @@ const DISPATCH_CONFIG = {
     const groups = new Map();
 
     (Array.isArray(leads) ? leads : []).forEach((lead) => {
-      const key = `${normalizeString(lead?.city).toLowerCase()}::${normalizeAddress(getLeadAddress(lead))}`;
+      const key = `${normalizeString(lead?.city).toLowerCase()}::${normalizeAddress(
+        getLeadAddress(lead)
+      )}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(lead);
     });
@@ -663,7 +713,9 @@ const DISPATCH_CONFIG = {
   }
 
   function buildSmarterRoute(selectedLeads, emergencyOnly) {
-    const sourceLeads = emergencyOnly ? selectedLeads.filter(isLeadUrgent) : selectedLeads;
+    const sourceLeads = emergencyOnly
+      ? selectedLeads.filter(isLeadUrgent)
+      : selectedLeads;
     const deduped = dedupeByAddress(sourceLeads);
     const grouped = groupLeadsForRouting(deduped);
     const orderedGroups = orderLeadGroups(grouped);
@@ -711,19 +763,27 @@ const DISPATCH_CONFIG = {
     const score = getHybridScore(lead);
 
     return `
-      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(getLeadId(lead))}">
+      <div class="lead-card ${selected ? "selected" : ""}" data-lead-id="${escapeHtml(
+      getLeadId(lead)
+    )}">
         <div class="lead-select-row">
           <div class="lead-select-label">Tap to select</div>
-          <input class="lead-checkbox" type="checkbox" ${selected ? "checked" : ""} tabindex="-1" aria-hidden="true" />
+          <input class="lead-checkbox" type="checkbox" ${
+            selected ? "checked" : ""
+          } tabindex="-1" aria-hidden="true" />
         </div>
 
         <div class="lead-top">
           <div class="lead-name">${escapeHtml(fullName)}</div>
-          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(badgeText)}</div>
+          <div class="lead-badge ${escapeHtml(badgeClass)}">${escapeHtml(
+      badgeText
+    )}</div>
         </div>
 
         <div class="lead-address">${escapeHtml(address || city)}</div>
-        <div class="lead-received">Received: ${escapeHtml(formatLeadReceivedDate(lead))}</div>
+        <div class="lead-received">Received: ${escapeHtml(
+          formatLeadReceivedDate(lead)
+        )}</div>
 
         <div class="lead-meta">
           <div class="meta-box">
@@ -750,9 +810,15 @@ const DISPATCH_CONFIG = {
         <div class="lead-score">Route Score: ${escapeHtml(String(score))}</div>
 
         <div class="lead-actions">
-          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(phone)}">Call</button>
-          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(address)}">Map</button>
-          <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(getLeadId(lead))}">Delete</button>
+          <button class="action-btn call-btn" type="button" data-phone="${escapeHtml(
+            phone
+          )}">Call</button>
+          <button class="action-btn map-btn" type="button" data-address="${escapeHtml(
+            address
+          )}">Map</button>
+          <button class="action-btn delete-btn" type="button" data-delete="${escapeHtml(
+            getLeadId(lead)
+          )}">Delete</button>
         </div>
       </div>
     `;
@@ -769,27 +835,33 @@ const DISPATCH_CONFIG = {
     const grouped = groupLeadsByReceivedDay(leads);
 
     els.leadList.innerHTML = grouped
-      .map((group) => `
+      .map(
+        (group) => `
         <section class="day-section">
           <div class="day-section-header">
             <div class="day-title">${escapeHtml(group.dayLabel)}</div>
-            <div class="day-count">${escapeHtml(String(group.items.length))} lead${group.items.length === 1 ? "" : "s"}</div>
+            <div class="day-count">${escapeHtml(String(group.items.length))} lead${
+          group.items.length === 1 ? "" : "s"
+        }</div>
           </div>
           <div class="lead-list">
             ${group.items.map(buildLeadCardHtml).join("")}
           </div>
         </section>
-      `)
+      `
+      )
       .join("");
 
-    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach((card) => {
-      card.addEventListener("click", function () {
-        const leadId = normalizeString(card.getAttribute("data-lead-id"));
-        const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
-        if (!lead) return;
-        toggleLeadSelection(lead);
-      });
-    });
+    Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach(
+      (card) => {
+        card.addEventListener("click", function () {
+          const leadId = normalizeString(card.getAttribute("data-lead-id"));
+          const lead = state.allLeads.find((item) => getLeadId(item) === leadId);
+          if (!lead) return;
+          toggleLeadSelection(lead);
+        });
+      }
+    );
 
     Array.from(els.leadList.querySelectorAll("[data-phone]")).forEach((btn) => {
       btn.addEventListener("click", function (event) {
@@ -811,7 +883,9 @@ const DISPATCH_CONFIG = {
           window.alert("No address available for this lead.");
           return;
         }
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          address
+        )}`;
         window.open(mapsUrl, "_blank", "noopener,noreferrer");
       });
     });
@@ -819,20 +893,52 @@ const DISPATCH_CONFIG = {
     Array.from(els.leadList.querySelectorAll("[data-delete]")).forEach((btn) => {
       btn.addEventListener("click", async function (event) {
         event.stopPropagation();
-        const leadId = normalizeString(btn.getAttribute("data-delete"));
-        if (!leadId) return;
 
-        const confirmed = window.confirm("Delete this lead permanently? This cannot be undone.");
+        const clickedLeadId = normalizeString(btn.getAttribute("data-delete"));
+        if (!clickedLeadId) return;
+
+        const lead = state.allLeads.find((item) => getLeadId(item) === clickedLeadId);
+        if (!lead) {
+          window.alert("Could not find that lead in the current list.");
+          return;
+        }
+
+        const dbId = getLeadDbId(lead);
+        const businessId = getLeadBusinessId(lead);
+
+        const confirmed = window.confirm(
+          "Delete this lead permanently? This cannot be undone."
+        );
         if (!confirmed) return;
 
         try {
-          await postJson("/api/delete-leads", { leadIds: [leadId] });
-          state.selectedLeadIds = state.selectedLeadIds.filter((id) => id !== leadId);
+          const deletePayload = {
+            leadIds: [clickedLeadId],
+            lead_ids: businessId ? [businessId] : [],
+            ids: dbId ? [dbId] : [],
+            leadId: clickedLeadId,
+            lead_id: businessId || clickedLeadId,
+            id: dbId || clickedLeadId,
+          };
+
+          const result = await postJson("/api/delete-leads", deletePayload);
+
+          if (Number(result?.deleted || 0) < 1) {
+            throw new Error(
+              result?.message || "Delete request finished, but no rows were actually deleted."
+            );
+          }
+
+          state.selectedLeadIds = state.selectedLeadIds.filter(
+            (id) => id !== clickedLeadId
+          );
+
           await handleRefresh();
+          setError("");
           setStatus("Lead deleted.");
         } catch (error) {
           console.error("Delete failed:", error);
-          setError("Could not delete lead. If it reappears after refresh, the backend delete endpoint still needs fixing.");
+          setError(error.message || "Could not delete lead.");
           setStatus("Delete failed.");
         }
       });
@@ -864,8 +970,12 @@ const DISPATCH_CONFIG = {
           <div class="route-number">Plan</div>
           <div class="lead-badge">${escapeHtml(plannedDay)}</div>
         </div>
-        <div class="route-step-address">Planned route day: ${escapeHtml(plannedDay)}</div>
-        <div class="route-step-meta">You can keep up to ${DISPATCH_CONFIG.maxSavedRoutes} planned routes saved.</div>
+        <div class="route-step-address">Planned route day: ${escapeHtml(
+          plannedDay
+        )}</div>
+        <div class="route-step-meta">You can keep up to ${
+          DISPATCH_CONFIG.maxSavedRoutes
+        } planned routes saved.</div>
       </div>
 
       <div class="route-step">
@@ -897,8 +1007,12 @@ const DISPATCH_CONFIG = {
 
               <div class="route-step-address">${escapeHtml(address)}</div>
               <div class="route-step-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${escapeHtml(String(score))}${
-            groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop` : ""
+                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
+            preferredTime
+          )} • Score ${escapeHtml(String(score))}${
+            groupedCount > 1
+              ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop`
+              : ""
           }
               </div>
             </div>
@@ -946,7 +1060,8 @@ const DISPATCH_CONFIG = {
       if (els.urgentCount) els.urgentCount.textContent = String(urgentLeads.length);
       if (els.todayCount) els.todayCount.textContent = String(todayLeads.length);
       if (els.overdueCount) els.overdueCount.textContent = String(overdueLeads.length);
-      if (els.unroutedCount) els.unroutedCount.textContent = String(unroutedLeads.length);
+      if (els.unroutedCount)
+        els.unroutedCount.textContent = String(unroutedLeads.length);
     } catch (error) {
       console.error("Failed to load dashboard counts:", error);
       setError("Could not load dashboard counts. Please refresh.");
@@ -968,11 +1083,20 @@ const DISPATCH_CONFIG = {
       const path = query ? `/api/leads-db?${query}` : "/api/leads-db";
       const result = await fetchJson(path);
 
-      state.allLeads = sortLeadsByReceivedFirst(filterOutRoutedLeads(result.leads));
+      state.allLeads = sortLeadsByReceivedFirst(
+        filterOutRoutedLeads(result.leads)
+      );
+
+      state.selectedLeadIds = state.selectedLeadIds.filter((selectedId) =>
+        state.allLeads.some((lead) => getLeadId(lead) === selectedId)
+      );
+
       renderLeads(state.allLeads);
 
       const count = state.allLeads.length;
-      setStatus(`${getFilterTitle(filterKey)} loaded: ${count} lead${count === 1 ? "" : "s"}.`);
+      setStatus(
+        `${getFilterTitle(filterKey)} loaded: ${count} lead${count === 1 ? "" : "s"}.`
+      );
     } catch (error) {
       console.error("Failed to load lead view:", error);
       renderEmptyState("Could not load leads.");
@@ -1020,7 +1144,9 @@ const DISPATCH_CONFIG = {
 
     const currentRoutes = getRoutes();
     if (currentRoutes.length >= DISPATCH_CONFIG.maxSavedRoutes) {
-      window.alert(`You can only keep ${DISPATCH_CONFIG.maxSavedRoutes} planned routes at a time. Delete one first.`);
+      window.alert(
+        `You can only keep ${DISPATCH_CONFIG.maxSavedRoutes} planned routes at a time. Delete one first.`
+      );
       return;
     }
 
@@ -1104,17 +1230,36 @@ const DISPATCH_CONFIG = {
       return;
     }
 
-    const confirmed = window.confirm(`Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"} permanently?`);
+    const leadsToDelete = state.allLeads.filter((lead) => ids.includes(getLeadId(lead)));
+
+    const dbIds = leadsToDelete.map(getLeadDbId).filter(Boolean);
+    const businessIds = leadsToDelete.map(getLeadBusinessId).filter(Boolean);
+
+    const confirmed = window.confirm(
+      `Delete ${ids.length} selected lead${ids.length === 1 ? "" : "s"} permanently?`
+    );
     if (!confirmed) return;
 
     try {
-      await postJson("/api/delete-leads", { leadIds: ids });
+      const result = await postJson("/api/delete-leads", {
+        leadIds: ids,
+        lead_ids: businessIds,
+        ids: dbIds,
+      });
+
+      if (Number(result?.deleted || 0) < 1) {
+        throw new Error(
+          result?.message || "Delete request finished, but no rows were actually deleted."
+        );
+      }
+
       state.selectedLeadIds = [];
       await handleRefresh();
+      setError("");
       setStatus("Selected leads deleted.");
     } catch (error) {
       console.error("Batch delete failed:", error);
-      setError("Could not delete selected leads. If they return after refresh, the backend delete endpoint still needs fixing.");
+      setError(error.message || "Could not delete selected leads.");
       setStatus("Batch delete failed.");
     }
   }
@@ -1125,13 +1270,21 @@ const DISPATCH_CONFIG = {
 
   function bindEvents() {
     if (els.refreshBtn) els.refreshBtn.addEventListener("click", handleRefresh);
-    if (els.showAllBtn) els.showAllBtn.addEventListener("click", () => loadLeadView(null));
-    if (els.clearFilterBtn) els.clearFilterBtn.addEventListener("click", () => loadLeadView(null));
+    if (els.showAllBtn)
+      els.showAllBtn.addEventListener("click", () => loadLeadView(null));
+    if (els.clearFilterBtn)
+      els.clearFilterBtn.addEventListener("click", () => loadLeadView(null));
     if (els.optimizeBtn) els.optimizeBtn.addEventListener("click", optimizeRoute);
-    if (els.emergencyOptimizeBtn) els.emergencyOptimizeBtn.addEventListener("click", emergencyOptimizeRoute);
-    if (els.batchDeleteBtn) els.batchDeleteBtn.addEventListener("click", batchDeleteSelected);
-    if (els.resumeRouteBtn) els.resumeRouteBtn.addEventListener("click", () => { window.location.href = "./route.html"; });
-    if (els.startModeSelect) els.startModeSelect.addEventListener("change", updateStartInputUi);
+    if (els.emergencyOptimizeBtn)
+      els.emergencyOptimizeBtn.addEventListener("click", emergencyOptimizeRoute);
+    if (els.batchDeleteBtn)
+      els.batchDeleteBtn.addEventListener("click", batchDeleteSelected);
+    if (els.resumeRouteBtn)
+      els.resumeRouteBtn.addEventListener("click", () => {
+        window.location.href = "./route.html";
+      });
+    if (els.startModeSelect)
+      els.startModeSelect.addEventListener("change", updateStartInputUi);
 
     els.filterCards.forEach((card) => {
       card.addEventListener("click", () => {
