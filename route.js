@@ -7,6 +7,8 @@ const ROUTE_CONFIG = {
 
   routesStorageKey: "yrs_routes",
   activeRouteIdStorageKey: "yrs_active_route_id",
+  fallbackCenterLat: 43.4516,
+  fallbackCenterLng: -80.4925,
 };
 
 (function () {
@@ -15,6 +17,8 @@ const ROUTE_CONFIG = {
     backToDashboardBtn: document.getElementById("backToDashboardBtn"),
     deleteRouteBtn: document.getElementById("deleteRouteBtn"),
     refreshRouteBtn: document.getElementById("refreshRouteBtn"),
+    reoptimizeRouteBtn: document.getElementById("reoptimizeRouteBtn"),
+    addStopBtn: document.getElementById("addStopBtn"),
     stopsList: document.getElementById("stopsList"),
     statusBar: document.getElementById("statusBar"),
     routeSelector: document.getElementById("routeSelector"),
@@ -99,6 +103,16 @@ const ROUTE_CONFIG = {
     return routes.find((route) => normalizeString(route.id) === activeRouteId) || null;
   }
 
+  function saveRoute(updatedRoute) {
+    const routes = getRoutes().map((route) =>
+      normalizeString(route.id) === normalizeString(updatedRoute.id)
+        ? updatedRoute
+        : route
+    );
+    setRoutes(routes);
+    setActiveRouteId(updatedRoute.id);
+  }
+
   function removeRouteFromStorage(routeId) {
     const nextRoutes = getRoutes().filter(
       (route) => normalizeString(route.id) !== normalizeString(routeId)
@@ -120,10 +134,19 @@ const ROUTE_CONFIG = {
     return normalizeString(lead?.lead_id) || normalizeString(lead?.id);
   }
 
+  function getStopId(stop) {
+    return normalizeString(stop?.custom_id) || getLeadId(stop);
+  }
+
+  function isCustomStop(stop) {
+    return stop?.is_custom === true;
+  }
+
   function getLeadAddress(lead) {
     return (
       normalizeString(lead?.property_address) ||
       normalizeString(lead?.full_address) ||
+      normalizeString(lead?.address) ||
       [
         normalizeString(lead?.property_address),
         normalizeString(lead?.city),
@@ -145,15 +168,23 @@ const ROUTE_CONFIG = {
     return Number.isFinite(value) ? value : null;
   }
 
+  function isValidCoordPair(lat, lng) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return false;
+    if (lat < -90 || lat > 90) return false;
+    if (lng < -180 || lng > 180) return false;
+    return true;
+  }
+
   function hasCoordinates(lead) {
-    return getLat(lead) !== null && getLng(lead) !== null;
+    return isValidCoordPair(getLat(lead), getLng(lead));
   }
 
   function getRouteStartPoint(route) {
     const startLat = Number(route?.startLat);
     const startLng = Number(route?.startLng);
 
-    if (Number.isFinite(startLat) && Number.isFinite(startLng)) {
+    if (isValidCoordPair(startLat, startLng)) {
       return {
         lat: startLat,
         lng: startLng,
@@ -176,10 +207,10 @@ const ROUTE_CONFIG = {
     }
 
     return {
-      lat: null,
-      lng: null,
+      lat: ROUTE_CONFIG.fallbackCenterLat,
+      lng: ROUTE_CONFIG.fallbackCenterLng,
       address: normalizeString(route?.startAddress),
-      source: "none",
+      source: "global_fallback",
     };
   }
 
@@ -199,6 +230,8 @@ const ROUTE_CONFIG = {
   }
 
   function getBadgeText(lead) {
+    if (isCustomStop(lead)) return "Custom";
+
     const routeStatus = normalizeString(lead?.route_status).toLowerCase();
     const priority = normalizeString(lead?.priority).toLowerCase();
     const serviceType = normalizeString(lead?.service_type).toLowerCase();
@@ -212,6 +245,7 @@ const ROUTE_CONFIG = {
   }
 
   function getBadgeClass(lead) {
+    if (isCustomStop(lead)) return "custom";
     const badge = getBadgeText(lead).toLowerCase();
     if (badge === "urgent" || badge === "emergency") return "urgent";
     if (badge === "done") return "done";
@@ -234,10 +268,45 @@ const ROUTE_CONFIG = {
     const json = await response.json().catch(() => null);
 
     if (!response.ok || !json || json.success !== true) {
-      throw new Error(json?.error || `POST failed: ${path}`);
+      throw new Error(json?.details || json?.error || json?.message || `POST failed: ${path}`);
     }
 
     return json;
+  }
+
+  async function geocodeAddress(address) {
+    const clean = normalizeString(address);
+    if (!clean) return null;
+
+    try {
+      const url = new URL("https://nominatim.openstreetmap.org/search");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("limit", "1");
+      url.searchParams.set("q", clean);
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const data = await response.json();
+      const first = Array.isArray(data) ? data[0] : null;
+      if (!first) return null;
+
+      const lat = Number(first.lat);
+      const lng = Number(first.lon);
+      if (!isValidCoordPair(lat, lng)) return null;
+
+      return {
+        lat,
+        lng,
+        address: first.display_name || clean,
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   function buildGoogleMapsDirectionsUrl(route) {
@@ -272,13 +341,13 @@ const ROUTE_CONFIG = {
   }
 
   function getMapPadding() {
-    return window.innerWidth <= 640 ? [16, 16] : [30, 30];
+    return window.innerWidth <= 640 ? [18, 18] : [30, 30];
   }
 
   function invalidateAndRefitMap() {
     if (!map) return;
 
-    setTimeout(() => {
+    const refit = () => {
       if (!map) return;
       map.invalidateSize();
 
@@ -287,7 +356,12 @@ const ROUTE_CONFIG = {
       } else if (lastBoundsPoints.length > 1) {
         map.fitBounds(lastBoundsPoints, { padding: getMapPadding() });
       }
-    }, 140);
+    };
+
+    requestAnimationFrame(refit);
+    setTimeout(refit, 120);
+    setTimeout(refit, 380);
+    setTimeout(refit, 760);
   }
 
   function renderEmpty() {
@@ -302,6 +376,8 @@ const ROUTE_CONFIG = {
     if (els.stopsList) els.stopsList.innerHTML = "";
     if (els.openFullRouteBtn) els.openFullRouteBtn.disabled = true;
     if (els.deleteRouteBtn) els.deleteRouteBtn.disabled = true;
+    if (els.addStopBtn) els.addStopBtn.disabled = true;
+    if (els.reoptimizeRouteBtn) els.reoptimizeRouteBtn.disabled = true;
 
     if (els.routeSelector) {
       els.routeSelector.innerHTML = `<option value="">No routes</option>`;
@@ -313,7 +389,10 @@ const ROUTE_CONFIG = {
     if (els.doneCountValue) els.doneCountValue.textContent = "0";
     if (els.routeTypeValue) els.routeTypeValue.textContent = "Standard";
     if (els.routeStats) els.routeStats.innerHTML = "";
-    if (els.mapNote) els.mapNote.textContent = "No route is loaded yet. Build one from the dispatch dashboard.";
+    if (els.mapNote) {
+      els.mapNote.textContent =
+        "No route is loaded yet. Build one from the dispatch dashboard.";
+    }
 
     destroyMap();
     setStatus("No active route loaded.");
@@ -435,6 +514,15 @@ const ROUTE_CONFIG = {
       .join("");
   }
 
+  function updateReoptimizeButton(route) {
+    if (!els.reoptimizeRouteBtn) return;
+    const edited = route?.wasEdited === true;
+    els.reoptimizeRouteBtn.textContent = edited
+      ? "Reoptimize Route"
+      : "Optimize Current Route";
+    els.reoptimizeRouteBtn.disabled = false;
+  }
+
   function renderRouteStats(route) {
     const stops = Array.isArray(route?.stops) ? route.stops : [];
     const urgentCount = stops.filter(isUrgentStop).length;
@@ -442,6 +530,7 @@ const ROUTE_CONFIG = {
       (stop) => normalizeString(stop?.route_status).toLowerCase() === "done"
     ).length;
     const groupedCount = stops.filter((stop) => Number(stop?.grouped_count || 1) > 1).length;
+    const customCount = stops.filter(isCustomStop).length;
     const routeType = normalizeString(route?.type || "standard");
     const endMode = normalizeString(route?.endMode || "last");
     const assignedDay = normalizeString(route?.assignedDay || "");
@@ -452,7 +541,9 @@ const ROUTE_CONFIG = {
     if (els.stopCountValue) els.stopCountValue.textContent = String(stops.length);
     if (els.urgentCountValue) els.urgentCountValue.textContent = String(urgentCount);
     if (els.doneCountValue) els.doneCountValue.textContent = String(doneCount);
-    if (els.routeTypeValue) els.routeTypeValue.textContent = routeType === "emergency" ? "Emergency" : "Standard";
+    if (els.routeTypeValue) {
+      els.routeTypeValue.textContent = routeType === "emergency" ? "Emergency" : "Standard";
+    }
 
     if (els.routeStats) {
       const chips = [
@@ -462,13 +553,17 @@ const ROUTE_CONFIG = {
         `${doneCount} Done`,
         endMode === "round_trip" ? "Round Trip" : "Last Location",
         groupedCount ? `${groupedCount} Multi-job Stop${groupedCount === 1 ? "" : "s"}` : null,
+        customCount ? `${customCount} Custom Stop${customCount === 1 ? "" : "s"}` : null,
         cityList.length ? cityList.join(" / ") : null,
+        route?.wasEdited ? "Edited Route" : null,
       ].filter(Boolean);
 
       els.routeStats.innerHTML = chips
         .map((chip) => `<div class="stat-chip">${escapeHtml(chip)}</div>`)
         .join("");
     }
+
+    updateReoptimizeButton(route);
   }
 
   function renderMap(route) {
@@ -495,7 +590,7 @@ const ROUTE_CONFIG = {
       return;
     }
 
-    if (startPoint.lat !== null && startPoint.lng !== null) {
+    if (isValidCoordPair(startPoint.lat, startPoint.lng)) {
       const startMarker = L.marker([startPoint.lat, startPoint.lng], {
         icon: createStartIcon(),
         zIndexOffset: 1000,
@@ -512,14 +607,14 @@ const ROUTE_CONFIG = {
 
       const lat = getLat(lead);
       const lng = getLng(lead);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      if (!isValidCoordPair(lat, lng)) return;
 
       const marker = L.marker([lat, lng], {
         icon: createStopIcon(index, lead),
       }).bindPopup(`
         <strong>Stop ${index + 1}</strong><br>
         ${escapeHtml(getLeadAddress(lead))}<br>
-        ${escapeHtml(formatDisplay(lead?.service_type))} • ${escapeHtml(getBadgeText(lead))}
+        ${escapeHtml(formatDisplay(lead?.service_type || (isCustomStop(lead) ? "Custom stop" : "")))} • ${escapeHtml(getBadgeText(lead))}
       `);
 
       marker.on("click", function () {
@@ -551,11 +646,11 @@ const ROUTE_CONFIG = {
     }
 
     let polylinePoints =
-      startPoint.lat !== null && startPoint.lng !== null
+      isValidCoordPair(startPoint.lat, startPoint.lng)
         ? [[startPoint.lat, startPoint.lng], ...linePoints]
         : [...linePoints];
 
-    if (endMode === "round_trip" && startPoint.lat !== null && startPoint.lng !== null) {
+    if (endMode === "round_trip" && isValidCoordPair(startPoint.lat, startPoint.lng)) {
       polylinePoints.push([startPoint.lat, startPoint.lng]);
       boundsPoints.push([startPoint.lat, startPoint.lng]);
     }
@@ -587,6 +682,8 @@ const ROUTE_CONFIG = {
           ? "Starting at the first selected address."
           : startPoint.source === "first_stop_fallback"
           ? "Custom start could not be mapped, so the view is anchored to the first stop area."
+          : startPoint.source === "global_fallback"
+          ? "Start point could not be mapped, so the map is centered on your service area."
           : "Starting with your saved route start.";
 
       const endModeText =
@@ -613,9 +710,12 @@ const ROUTE_CONFIG = {
     els.stopsList.innerHTML = stops
       .map((lead, index) => {
         const address = getLeadAddress(lead);
-        const serviceType = formatDisplay(lead?.service_type);
-        const priority = formatDisplay(lead?.priority);
-        const preferredTime = formatDisplay(lead?.preferred_time);
+        const serviceType = formatDisplay(
+          lead?.service_type,
+          isCustomStop(lead) ? "Custom stop" : "N/A"
+        );
+        const priority = formatDisplay(lead?.priority, isCustomStop(lead) ? "Custom" : "N/A");
+        const preferredTime = formatDisplay(lead?.preferred_time, isCustomStop(lead) ? "Manual stop" : "N/A");
         const phone = formatDisplay(lead?.phone, "");
         const routeStatus = normalizeString(lead?.route_status || "routed");
         const groupedCount = Number(lead?.grouped_count || 1);
@@ -636,8 +736,8 @@ const ROUTE_CONFIG = {
 
             <div class="stop-meta">
               ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)}${
-          groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""
-        }
+                groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""
+              }
             </div>
 
             <div class="stop-meta">
@@ -645,10 +745,21 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-actions">
-              <button class="btn btn-success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
-              <button class="btn btn-primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${hasMap ? "" : "disabled"}>Map</button>
-              <button class="btn btn-dark" type="button" data-arrived="${escapeHtml(getLeadId(lead))}">Arrived</button>
-              <button class="btn btn-danger" type="button" data-done="${escapeHtml(getLeadId(lead))}">Done</button>
+              <button class="small-btn success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
+              <button class="small-btn primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${hasMap ? "" : "disabled"}>Map</button>
+              <button class="small-btn dark" type="button" data-arrived="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Arrived</button>
+            </div>
+
+            <div class="stop-edit-actions">
+              <button class="small-btn danger" type="button" data-done="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Done</button>
+              <button class="small-btn edit" type="button" data-move-up="${index}" ${index === 0 ? "disabled" : ""}>Move Up</button>
+              <button class="small-btn edit" type="button" data-move-down="${index}" ${index === stops.length - 1 ? "disabled" : ""}>Move Down</button>
+            </div>
+
+            <div class="stop-edit-actions">
+              <button class="small-btn edit" type="button" data-remove-stop="${index}">Remove</button>
+              <button class="small-btn edit" type="button" data-focus-stop="${index}">Focus</button>
+              <button class="small-btn edit" type="button" data-add-after="${index}">+ Add After</button>
             </div>
           </div>
         `;
@@ -701,6 +812,46 @@ const ROUTE_CONFIG = {
         await markStopStatus(leadId, "done");
       });
     });
+
+    Array.from(els.stopsList.querySelectorAll("[data-move-up]")).forEach((btn) => {
+      btn.addEventListener("click", function (event) {
+        event.stopPropagation();
+        const index = Number(btn.getAttribute("data-move-up"));
+        moveStop(index, index - 1);
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-move-down]")).forEach((btn) => {
+      btn.addEventListener("click", function (event) {
+        event.stopPropagation();
+        const index = Number(btn.getAttribute("data-move-down"));
+        moveStop(index, index + 1);
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-remove-stop]")).forEach((btn) => {
+      btn.addEventListener("click", async function (event) {
+        event.stopPropagation();
+        const index = Number(btn.getAttribute("data-remove-stop"));
+        await removeStop(index);
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-focus-stop]")).forEach((btn) => {
+      btn.addEventListener("click", function (event) {
+        event.stopPropagation();
+        const index = Number(btn.getAttribute("data-focus-stop"));
+        focusStopByIndex(index);
+      });
+    });
+
+    Array.from(els.stopsList.querySelectorAll("[data-add-after]")).forEach((btn) => {
+      btn.addEventListener("click", async function (event) {
+        event.stopPropagation();
+        const index = Number(btn.getAttribute("data-add-after"));
+        await addCustomStop(index + 1);
+      });
+    });
   }
 
   function renderRoute(route) {
@@ -713,6 +864,8 @@ const ROUTE_CONFIG = {
 
     if (els.openFullRouteBtn) els.openFullRouteBtn.disabled = false;
     if (els.deleteRouteBtn) els.deleteRouteBtn.disabled = false;
+    if (els.addStopBtn) els.addStopBtn.disabled = false;
+    if (els.reoptimizeRouteBtn) els.reoptimizeRouteBtn.disabled = false;
 
     renderRouteSelector();
     renderRouteStats(route);
@@ -720,6 +873,22 @@ const ROUTE_CONFIG = {
     renderStops(route);
 
     setStatus(`Route loaded: ${stops.length} stop${stops.length === 1 ? "" : "s"}.`);
+  }
+
+  function updateRouteStops(route, updatedStops, extraPatch = {}) {
+    const nextRoute = {
+      ...route,
+      ...extraPatch,
+      wasEdited: true,
+      stops: updatedStops.map((stop, index) => ({
+        ...stop,
+        route_order: index,
+      })),
+    };
+
+    saveRoute(nextRoute);
+    renderRoute(nextRoute);
+    return nextRoute;
   }
 
   async function markStopStatus(leadId, status) {
@@ -737,18 +906,221 @@ const ROUTE_CONFIG = {
         return { ...stop, route_status: status };
       });
 
-      const routes = getRoutes().map((item) => {
-        if (normalizeString(item.id) !== normalizeString(route.id)) return item;
-        return { ...item, stops: updatedStops };
-      });
-
-      setRoutes(routes);
-      renderRoute({ ...route, stops: updatedStops });
+      updateRouteStops(route, updatedStops, {});
       setStatus(`Stop updated to ${status}.`);
     } catch (error) {
       console.error("Failed to update stop status:", error);
       window.alert("Could not update stop status.");
     }
+  }
+
+  function moveStop(fromIndex, toIndex) {
+    const route = getActiveRoute();
+    if (!route) return;
+
+    const stops = [...(route.stops || [])];
+    if (
+      !Number.isInteger(fromIndex) ||
+      !Number.isInteger(toIndex) ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= stops.length ||
+      toIndex >= stops.length
+    ) {
+      return;
+    }
+
+    const [moved] = stops.splice(fromIndex, 1);
+    stops.splice(toIndex, 0, moved);
+
+    updateRouteStops(route, stops);
+    setStatus("Stop order updated.");
+  }
+
+  async function removeStop(index) {
+    const route = getActiveRoute();
+    if (!route) return;
+
+    const stops = [...(route.stops || [])];
+    const stop = stops[index];
+    if (!stop) return;
+
+    const confirmed = window.confirm(
+      isCustomStop(stop)
+        ? "Remove this custom stop from the route?"
+        : "Remove this stop from the route and return it to the dashboard?"
+    );
+    if (!confirmed) return;
+
+    try {
+      if (!isCustomStop(stop)) {
+        await postJson("/api/route/update-status", {
+          lead_id: getLeadId(stop),
+          status: "unrouted",
+        });
+      }
+
+      stops.splice(index, 1);
+
+      if (!stops.length) {
+        const routeId = normalizeString(route?.id);
+        removeRouteFromStorage(routeId);
+        const nextRoute = getActiveRoute();
+        if (nextRoute) {
+          renderRoute(nextRoute);
+        } else {
+          window.location.href = "./dispatch.html";
+        }
+        return;
+      }
+
+      updateRouteStops(route, stops);
+      setStatus("Stop removed from route.");
+    } catch (error) {
+      console.error("Failed to remove stop:", error);
+      window.alert("Could not remove this stop.");
+    }
+  }
+
+  function getDistanceBetween(a, b) {
+    const lat1 = Number(a?.lat);
+    const lng1 = Number(a?.lng);
+    const lat2 = Number(b?.lat);
+    const lng2 = Number(b?.lng);
+
+    if (!isValidCoordPair(lat1, lng1) || !isValidCoordPair(lat2, lng2)) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const dx = lat1 - lat2;
+    const dy = lng1 - lng2;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  async function ensureStopsHaveCoordinates(stops) {
+    const updated = [];
+
+    for (const stop of stops) {
+      if (hasCoordinates(stop)) {
+        updated.push(stop);
+        continue;
+      }
+
+      const address = getLeadAddress(stop);
+      if (!address) {
+        updated.push(stop);
+        continue;
+      }
+
+      const geocoded = await geocodeAddress(address);
+      if (!geocoded) {
+        updated.push(stop);
+        continue;
+      }
+
+      updated.push({
+        ...stop,
+        full_address: address || geocoded.address,
+        property_address: normalizeString(stop?.property_address) || address,
+        lat: geocoded.lat,
+        lng: geocoded.lng,
+      });
+    }
+
+    return updated;
+  }
+
+  async function reoptimizeCurrentRoute() {
+    const route = getActiveRoute();
+    if (!route) return;
+
+    const stops = await ensureStopsHaveCoordinates(route.stops || []);
+    if (!stops.length) return;
+
+    const start = getRouteStartPoint({
+      ...route,
+      stops,
+    });
+
+    const withCoords = stops.filter(hasCoordinates);
+    const withoutCoords = stops.filter((stop) => !hasCoordinates(stop));
+
+    if (!withCoords.length) {
+      updateRouteStops(route, stops);
+      setStatus("Route saved, but there were not enough coordinates to reoptimize order.");
+      return;
+    }
+
+    const remaining = [...withCoords];
+    const ordered = [];
+    let currentPoint = {
+      lat: start.lat,
+      lng: start.lng,
+    };
+
+    while (remaining.length) {
+      let bestIndex = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      remaining.forEach((stop, index) => {
+        const distance = getDistanceBetween(currentPoint, {
+          lat: getLat(stop),
+          lng: getLng(stop),
+        });
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
+      });
+
+      const [nextStop] = remaining.splice(bestIndex, 1);
+      ordered.push(nextStop);
+      currentPoint = {
+        lat: getLat(nextStop),
+        lng: getLng(nextStop),
+      };
+    }
+
+    const nextStops = [...ordered, ...withoutCoords];
+    updateRouteStops(route, nextStops);
+    setStatus("Route reoptimized.");
+  }
+
+  async function addCustomStop(insertAtIndex = null) {
+    const route = getActiveRoute();
+    if (!route) return;
+
+    const address = window.prompt("Enter the stop address:");
+    const cleanAddress = normalizeString(address);
+    if (!cleanAddress) return;
+
+    let geocoded = await geocodeAddress(cleanAddress);
+
+    const newStop = {
+      custom_id: `custom_stop_${Date.now()}`,
+      is_custom: true,
+      full_address: geocoded?.address || cleanAddress,
+      property_address: geocoded?.address || cleanAddress,
+      city: "",
+      province: "",
+      postal_code: "",
+      service_type: "Custom stop",
+      priority: "Custom",
+      preferred_time: "",
+      route_status: "routed",
+      lat: geocoded?.lat ?? null,
+      lng: geocoded?.lng ?? null,
+    };
+
+    const stops = [...(route.stops || [])];
+    const insertIndex =
+      Number.isInteger(insertAtIndex) && insertAtIndex >= 0 && insertAtIndex <= stops.length
+        ? insertAtIndex
+        : stops.length;
+
+    stops.splice(insertIndex, 0, newStop);
+    updateRouteStops(route, stops);
+    setStatus("Custom stop added.");
   }
 
   async function deleteRoute() {
@@ -761,7 +1133,9 @@ const ROUTE_CONFIG = {
       return;
     }
 
-    const confirmed = window.confirm("Delete this route and return all routed jobs back to the dashboard?");
+    const confirmed = window.confirm(
+      "Delete this route and return all routed jobs back to the dashboard?"
+    );
     if (!confirmed) return;
 
     try {
@@ -798,6 +1172,18 @@ const ROUTE_CONFIG = {
       els.deleteRouteBtn.addEventListener("click", deleteRoute);
     }
 
+    if (els.addStopBtn) {
+      els.addStopBtn.addEventListener("click", async function () {
+        await addCustomStop();
+      });
+    }
+
+    if (els.reoptimizeRouteBtn) {
+      els.reoptimizeRouteBtn.addEventListener("click", async function () {
+        await reoptimizeCurrentRoute();
+      });
+    }
+
     if (els.openFullRouteBtn) {
       els.openFullRouteBtn.addEventListener("click", function () {
         const route = getActiveRoute();
@@ -831,10 +1217,10 @@ const ROUTE_CONFIG = {
 
     window.addEventListener("resize", invalidateAndRefitMap);
     window.addEventListener("orientationchange", invalidateAndRefitMap);
+    window.addEventListener("pageshow", invalidateAndRefitMap);
   }
 
   function init() {
-    bindEvents();
     renderRouteSelector();
 
     const route = getActiveRoute();
@@ -846,5 +1232,6 @@ const ROUTE_CONFIG = {
     renderRoute(route);
   }
 
+  bindEvents();
   init();
 })();
