@@ -101,6 +101,80 @@ const DISPATCH_CONFIG = {
     return Number.isFinite(lng) ? lng : null;
   }
 
+  function getLeadTimestamp(lead) {
+    const raw =
+      normalizeString(lead?.submitted_at) ||
+      normalizeString(lead?.received_at) ||
+      "";
+    if (!raw) return null;
+
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function formatLeadReceivedDate(lead) {
+    const date = getLeadTimestamp(lead);
+    if (!date) return "Unknown received time";
+
+    return date.toLocaleString("en-CA", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function getLeadDayKey(lead) {
+    const date = getLeadTimestamp(lead);
+    if (!date) return "unknown";
+    return date.toISOString().slice(0, 10);
+  }
+
+  function getLeadDayLabelFromKey(key) {
+    if (key === "unknown") return "Unknown Date";
+    const date = new Date(`${key}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return key;
+
+    return date.toLocaleDateString("en-CA", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  function sortLeadsByReceivedFirst(leads) {
+    return [...(Array.isArray(leads) ? leads : [])].sort((a, b) => {
+      const dateA = getLeadTimestamp(a);
+      const dateB = getLeadTimestamp(b);
+
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+
+      return dateA.getTime() - dateB.getTime();
+    });
+  }
+
+  function groupLeadsByReceivedDay(leads) {
+    const sorted = sortLeadsByReceivedFirst(leads);
+    const groups = new Map();
+
+    sorted.forEach((lead) => {
+      const dayKey = getLeadDayKey(lead);
+      if (!groups.has(dayKey)) {
+        groups.set(dayKey, []);
+      }
+      groups.get(dayKey).push(lead);
+    });
+
+    return Array.from(groups.entries()).map(([dayKey, items]) => ({
+      dayKey,
+      dayLabel: getLeadDayLabelFromKey(dayKey),
+      items,
+    }));
+  }
+
   function normalizeAddress(address) {
     return normalizeString(address)
       .toLowerCase()
@@ -170,8 +244,7 @@ const DISPATCH_CONFIG = {
 
   function updateResumeRouteButton() {
     if (!els.resumeRouteBtn) return;
-    const routes = getRoutes();
-    els.resumeRouteBtn.hidden = routes.length === 0;
+    els.resumeRouteBtn.hidden = getRoutes().length === 0;
   }
 
   function getStartMode() {
@@ -193,12 +266,12 @@ const DISPATCH_CONFIG = {
     return { lat, lng };
   }
 
-  function getSelectedLeadsInOrder() {
+  function getSelectedLeadsInCurrentOrder() {
     return state.allLeads.filter((lead) => state.selectedLeadIds.includes(getLeadId(lead)));
   }
 
   function getStartAddressFromSelectedFirst() {
-    const selectedLeads = getSelectedLeadsInOrder();
+    const selectedLeads = getSelectedLeadsInCurrentOrder();
     if (!selectedLeads.length) return "";
     return getLeadAddress(selectedLeads[0]);
   }
@@ -212,8 +285,7 @@ const DISPATCH_CONFIG = {
     }
 
     if (mode === "first") {
-      const firstAddress = getStartAddressFromSelectedFirst();
-      return firstAddress || DISPATCH_CONFIG.defaultStartAddress;
+      return getStartAddressFromSelectedFirst() || DISPATCH_CONFIG.defaultStartAddress;
     }
 
     return DISPATCH_CONFIG.defaultStartAddress;
@@ -233,7 +305,7 @@ const DISPATCH_CONFIG = {
     }
 
     if (mode === "first") {
-      const selectedLeads = getSelectedLeadsInOrder();
+      const selectedLeads = getSelectedLeadsInCurrentOrder();
       const firstLead = selectedLeads[0] || null;
 
       if (firstLead) {
@@ -264,8 +336,7 @@ const DISPATCH_CONFIG = {
 
   function updateStartInputUi() {
     if (!els.startModeSelect || !els.customStartInput) return;
-    const isCustom = normalizeString(els.startModeSelect.value) === "custom";
-    els.customStartInput.hidden = !isCustom;
+    els.customStartInput.hidden = normalizeString(els.startModeSelect.value) !== "custom";
   }
 
   function setStatus(message) {
@@ -301,7 +372,8 @@ const DISPATCH_CONFIG = {
 
     if (els.emergencyOptimizeBtn) {
       els.emergencyOptimizeBtn.disabled = state.isLoadingLeads;
-      els.emergencyOptimizeBtn.textContent = state.isLoadingLeads ? "Loading..." : "Emergency Optimize";
+      els.emergencyOptimizeBtn.textContent =
+        state.isLoadingLeads ? "Loading..." : "Emergency Optimize";
     }
   }
 
@@ -331,22 +403,22 @@ const DISPATCH_CONFIG = {
       case "unrouted":
         return "Unrouted Leads";
       default:
-        return "All Leads";
+        return "Incoming Leads";
     }
   }
 
   function getFilterSubtitle(filterKey) {
     switch (filterKey) {
       case "urgent":
-        return "Leaks, emergencies, and high-pressure jobs first";
+        return "Only urgent jobs, grouped by day received.";
       case "today":
-        return "Jobs assigned or due today";
+        return "Jobs assigned or due today.";
       case "overdue":
-        return "Older jobs still needing action";
+        return "Older jobs still needing action.";
       case "unrouted":
-        return "Dispatch-ready leads not yet routed";
+        return "Dispatch-ready leads not yet routed.";
       default:
-        return "Showing dispatch-ready leads only";
+        return "Grouped by day received, then ordered by time received first.";
     }
   }
 
@@ -665,6 +737,7 @@ const DISPATCH_CONFIG = {
         </div>
 
         <div class="lead-address">${escapeHtml(address || city)}</div>
+        <div class="lead-received">Received: ${escapeHtml(formatLeadReceivedDate(lead))}</div>
 
         <div class="lead-meta">
           <div class="meta-box">
@@ -709,7 +782,25 @@ const DISPATCH_CONFIG = {
       return;
     }
 
-    els.leadList.innerHTML = leads.map(buildLeadCardHtml).join("");
+    const grouped = groupLeadsByReceivedDay(leads);
+
+    els.leadList.innerHTML = grouped
+      .map((group) => {
+        return `
+          <section class="day-section">
+            <div class="day-section-header">
+              <div class="day-title">${escapeHtml(group.dayLabel)}</div>
+              <div class="day-count">${escapeHtml(String(group.items.length))} lead${
+          group.items.length === 1 ? "" : "s"
+        }</div>
+            </div>
+            <div class="lead-list">
+              ${group.items.map(buildLeadCardHtml).join("")}
+            </div>
+          </section>
+        `;
+      })
+      .join("");
 
     Array.from(els.leadList.querySelectorAll(".lead-card[data-lead-id]")).forEach((card) => {
       card.addEventListener("click", function () {
@@ -816,9 +907,11 @@ const DISPATCH_CONFIG = {
 
               <div class="route-step-address">${escapeHtml(address)}</div>
               <div class="route-step-meta">
-                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)} • Score ${escapeHtml(
-                  String(score)
-                )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop` : ""}
+                ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
+            preferredTime
+          )} • Score ${escapeHtml(String(score))}${
+            groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs at this stop` : ""
+          }
               </div>
             </div>
           `;
