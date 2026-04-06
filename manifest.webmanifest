@@ -1,0 +1,32 @@
+{
+    "id": "/yrs-dispatch-app/",
+    "name": "YRS Dispatch Dashboard",
+    "short_name": "YRS Dispatch",
+    "description": "Roofing dispatch and lead dashboard.",
+    "start_url": "/yrs-dispatch-app/dispatch.html",
+    "scope": "/yrs-dispatch-app/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#495b65",
+    "orientation": "portrait",
+    "lang": "en",
+    "icons": [
+      {
+        "src": "/yrs-dispatch-app/icons/icon-192.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/yrs-dispatch-app/icons/icon-512.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/yrs-dispatch-app/icons/apple-touch-icon.png",
+        "sizes": "180x180",
+        "type": "image/png"
+      }
+    ]
+  }
