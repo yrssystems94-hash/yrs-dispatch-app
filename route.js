@@ -720,9 +720,7 @@ const ROUTE_CONFIG = {
           ? "Route returns to the start point."
           : "Route ends at the last stop.";
 
-      els.mapNote.textContent = `${linePoints.length} mapped stop${
-        linePoints.length === 1 ? "" : "s"
-      } rendered. ${startSourceText} ${endModeText}`;
+      els.mapNote.textContent = `${linePoints.length} mapped stop${linePoints.length === 1 ? "" : "s"} rendered. ${startSourceText} ${endModeText}`;
     }
   }
 
@@ -754,9 +752,7 @@ const ROUTE_CONFIG = {
         const routeStatus = normalizeString(lead?.route_status || "routed");
         const groupedCount = Number(lead?.grouped_count || 1);
         const hasMap = hasCoordinates(lead) || Boolean(address);
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          address
-        )}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
         return `
           <div class="stop-card" data-stop-index="${index}">
@@ -771,9 +767,9 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-meta">
-              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
-          preferredTime
-        )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
+              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)}${
+                groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""
+              }
             </div>
 
             <div class="stop-meta">
@@ -781,27 +777,15 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-actions">
-              <button class="small-btn success" type="button" data-phone="${escapeHtml(
-                phone
-              )}">Call</button>
-              <button class="small-btn primary" type="button" data-map="${escapeHtml(
-                mapsUrl
-              )}" ${hasMap ? "" : "disabled"}>Map</button>
-              <button class="small-btn dark" type="button" data-arrived="${escapeHtml(
-                getLeadId(lead)
-              )}" ${isCustomStop(lead) ? "disabled" : ""}>Arrived</button>
+              <button class="small-btn success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
+              <button class="small-btn primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${hasMap ? "" : "disabled"}>Map</button>
+              <button class="small-btn dark" type="button" data-arrived="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Arrived</button>
             </div>
 
             <div class="stop-edit-actions">
-              <button class="small-btn danger" type="button" data-done="${escapeHtml(
-                getLeadId(lead)
-              )}" ${isCustomStop(lead) ? "disabled" : ""}>Done</button>
-              <button class="small-btn success" type="button" data-move-up="${index}" ${
-          index === 0 ? "disabled" : ""
-        }>Move Up</button>
-              <button class="small-btn success" type="button" data-move-down="${index}" ${
-          index === stops.length - 1 ? "disabled" : ""
-        }>Move Down</button>
+              <button class="small-btn danger" type="button" data-done="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Done</button>
+              <button class="small-btn success" type="button" data-move-up="${index}" ${index === 0 ? "disabled" : ""}>Move Up</button>
+              <button class="small-btn success" type="button" data-move-down="${index}" ${index === stops.length - 1 ? "disabled" : ""}>Move Down</button>
             </div>
 
             <div class="stop-edit-actions">
