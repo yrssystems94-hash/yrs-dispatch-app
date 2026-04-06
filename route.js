@@ -153,10 +153,6 @@ const ROUTE_CONFIG = {
     return normalizeString(lead?.lead_id) || normalizeString(lead?.id);
   }
 
-  function getStopId(stop) {
-    return normalizeString(stop?.custom_id) || getLeadId(stop);
-  }
-
   function isCustomStop(stop) {
     return stop?.is_custom === true;
   }
@@ -547,7 +543,7 @@ const ROUTE_CONFIG = {
       .join("");
   }
 
-  function updateReoptimizeButton(route) {
+  function updateReoptimizeButton() {
     if (!els.reoptimizeRouteBtn) return;
     els.reoptimizeRouteBtn.disabled = false;
     paintReoptimizeButton();
@@ -593,7 +589,7 @@ const ROUTE_CONFIG = {
         .join("");
     }
 
-    updateReoptimizeButton(route);
+    updateReoptimizeButton();
   }
 
   function renderMap(route) {
@@ -644,7 +640,9 @@ const ROUTE_CONFIG = {
       }).bindPopup(`
         <strong>Stop ${index + 1}</strong><br>
         ${escapeHtml(getLeadAddress(lead))}<br>
-        ${escapeHtml(formatDisplay(lead?.service_type || (isCustomStop(lead) ? "Custom stop" : "")))} • ${escapeHtml(getBadgeText(lead))}
+        ${escapeHtml(
+          formatDisplay(lead?.service_type || (isCustomStop(lead) ? "Custom stop" : ""))
+        )} • ${escapeHtml(getBadgeText(lead))}
       `);
 
       marker.on("click", function () {
@@ -670,7 +668,8 @@ const ROUTE_CONFIG = {
       }
 
       if (els.mapNote) {
-        els.mapNote.textContent = "No valid map pins available yet because these stops are missing coordinates.";
+        els.mapNote.textContent =
+          "No valid map pins available yet because these stops are missing coordinates.";
       }
       return;
     }
@@ -721,7 +720,9 @@ const ROUTE_CONFIG = {
           ? "Route returns to the start point."
           : "Route ends at the last stop.";
 
-      els.mapNote.textContent = `${linePoints.length} mapped stop${linePoints.length === 1 ? "" : "s"} rendered. ${startSourceText} ${endModeText}`;
+      els.mapNote.textContent = `${linePoints.length} mapped stop${
+        linePoints.length === 1 ? "" : "s"
+      } rendered. ${startSourceText} ${endModeText}`;
     }
   }
 
@@ -753,7 +754,9 @@ const ROUTE_CONFIG = {
         const routeStatus = normalizeString(lead?.route_status || "routed");
         const groupedCount = Number(lead?.grouped_count || 1);
         const hasMap = hasCoordinates(lead) || Boolean(address);
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          address
+        )}`;
 
         return `
           <div class="stop-card" data-stop-index="${index}">
@@ -768,9 +771,9 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-meta">
-              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(preferredTime)}${
-                groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""
-              }
+              ${escapeHtml(serviceType)} • ${escapeHtml(priority)} • ${escapeHtml(
+          preferredTime
+        )}${groupedCount > 1 ? ` • ${escapeHtml(String(groupedCount))} jobs here` : ""}
             </div>
 
             <div class="stop-meta">
@@ -778,15 +781,27 @@ const ROUTE_CONFIG = {
             </div>
 
             <div class="stop-actions">
-              <button class="small-btn success" type="button" data-phone="${escapeHtml(phone)}">Call</button>
-              <button class="small-btn primary" type="button" data-map="${escapeHtml(mapsUrl)}" ${hasMap ? "" : "disabled"}>Map</button>
-              <button class="small-btn dark" type="button" data-arrived="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Arrived</button>
+              <button class="small-btn success" type="button" data-phone="${escapeHtml(
+                phone
+              )}">Call</button>
+              <button class="small-btn primary" type="button" data-map="${escapeHtml(
+                mapsUrl
+              )}" ${hasMap ? "" : "disabled"}>Map</button>
+              <button class="small-btn dark" type="button" data-arrived="${escapeHtml(
+                getLeadId(lead)
+              )}" ${isCustomStop(lead) ? "disabled" : ""}>Arrived</button>
             </div>
 
             <div class="stop-edit-actions">
-              <button class="small-btn danger" type="button" data-done="${escapeHtml(getLeadId(lead))}" ${isCustomStop(lead) ? "disabled" : ""}>Done</button>
-              <button class="small-btn success" type="button" data-move-up="${index}" ${index === 0 ? "disabled" : ""}>Move Up</button>
-              <button class="small-btn success" type="button" data-move-down="${index}" ${index === stops.length - 1 ? "disabled" : ""}>Move Down</button>
+              <button class="small-btn danger" type="button" data-done="${escapeHtml(
+                getLeadId(lead)
+              )}" ${isCustomStop(lead) ? "disabled" : ""}>Done</button>
+              <button class="small-btn success" type="button" data-move-up="${index}" ${
+          index === 0 ? "disabled" : ""
+        }>Move Up</button>
+              <button class="small-btn success" type="button" data-move-down="${index}" ${
+          index === stops.length - 1 ? "disabled" : ""
+        }>Move Down</button>
             </div>
 
             <div class="stop-edit-actions">
@@ -1102,6 +1117,184 @@ const ROUTE_CONFIG = {
           lat: getLat(stop),
           lng: getLng(stop),
         });
+
         if (distance < bestDistance) {
           bestDistance = distance;
-         
+          bestIndex = index;
+        }
+      });
+
+      const [nextStop] = remaining.splice(bestIndex, 1);
+      ordered.push(nextStop);
+      currentPoint = {
+        lat: getLat(nextStop),
+        lng: getLng(nextStop),
+      };
+    }
+
+    const nextStops = [...ordered, ...withoutCoords];
+    updateRouteStops(route, nextStops);
+    setStatus("Route reoptimized.");
+  }
+
+  async function addCustomStop(insertAtIndex = null) {
+    const route = getActiveRoute();
+    if (!route) return;
+
+    const address = window.prompt("Enter the stop address:");
+    const cleanAddress = normalizeString(address);
+    if (!cleanAddress) return;
+
+    const geocoded = await geocodeAddress(cleanAddress);
+
+    const newStop = {
+      custom_id: `custom_stop_${Date.now()}`,
+      is_custom: true,
+      full_address: geocoded?.address || cleanAddress,
+      property_address: geocoded?.address || cleanAddress,
+      city: "",
+      province: "",
+      postal_code: "",
+      service_type: "Custom stop",
+      priority: "Custom",
+      preferred_time: "",
+      route_status: "routed",
+      lat: geocoded?.lat ?? null,
+      lng: geocoded?.lng ?? null,
+    };
+
+    const stops = [...(route.stops || [])];
+    const insertIndex =
+      Number.isInteger(insertAtIndex) && insertAtIndex >= 0 && insertAtIndex <= stops.length
+        ? insertAtIndex
+        : stops.length;
+
+    stops.splice(insertIndex, 0, newStop);
+    updateRouteStops(route, stops);
+    setStatus("Custom stop added.");
+  }
+
+  async function deleteRoute() {
+    const route = getActiveRoute();
+    const routeId = normalizeString(route?.id);
+
+    if (!routeId) {
+      renderEmpty();
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this route and return all routed jobs back to the dashboard?"
+    );
+    if (!confirmed) return;
+
+    try {
+      await postJson("/api/route/delete", { route_id: routeId });
+    } catch (error) {
+      console.error("Delete route backend warning:", error);
+
+      const isStaleNotFound = error?.status === 404 || /not found/i.test(error?.message || "");
+
+      if (!isStaleNotFound) {
+        setStatus("Could not delete route. Please try again.");
+        window.alert("Failed to delete route and restore jobs.");
+        return;
+      }
+    }
+
+    const nextRoutes = removeRouteFromStorage(routeId);
+
+    if (nextRoutes.length) {
+      const nextRoute = getActiveRoute();
+      if (nextRoute) {
+        renderRoute(nextRoute);
+        setStatus("Old route removed.");
+        return;
+      }
+    }
+
+    renderEmpty();
+    window.location.href = "./dispatch.html";
+  }
+
+  function bindEvents() {
+    if (els.backToDashboardBtn) {
+      els.backToDashboardBtn.addEventListener("click", function () {
+        window.location.href = "./dispatch.html";
+      });
+    }
+
+    if (els.refreshRouteBtn) {
+      els.refreshRouteBtn.addEventListener("click", function () {
+        init();
+      });
+    }
+
+    if (els.deleteRouteBtn) {
+      els.deleteRouteBtn.addEventListener("click", deleteRoute);
+    }
+
+    if (els.addStopBtn) {
+      els.addStopBtn.addEventListener("click", async function () {
+        await addCustomStop();
+      });
+    }
+
+    if (els.reoptimizeRouteBtn) {
+      els.reoptimizeRouteBtn.addEventListener("click", async function () {
+        await reoptimizeCurrentRoute();
+      });
+    }
+
+    if (els.openFullRouteBtn) {
+      els.openFullRouteBtn.addEventListener("click", function () {
+        const route = getActiveRoute();
+        const url = buildGoogleMapsDirectionsUrl(route);
+
+        if (!url) {
+          window.alert("Could not build Google Maps route.");
+          return;
+        }
+
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+    }
+
+    if (els.routeSelector) {
+      els.routeSelector.addEventListener("change", function () {
+        const routeId = normalizeString(els.routeSelector.value);
+        if (!routeId) return;
+
+        setActiveRouteId(routeId);
+        const route = getActiveRoute();
+
+        if (!route) {
+          renderEmpty();
+          return;
+        }
+
+        renderRoute(route);
+      });
+    }
+
+    window.addEventListener("resize", invalidateAndRefitMap);
+    window.addEventListener("orientationchange", invalidateAndRefitMap);
+    window.addEventListener("pageshow", invalidateAndRefitMap);
+  }
+
+  function init() {
+    renderRouteSelector();
+    paintReoptimizeButton();
+
+    const route = getActiveRoute();
+    if (!route) {
+      renderEmpty();
+      return;
+    }
+
+    renderRoute(route);
+  }
+
+  bindEvents();
+  init();
+})();
