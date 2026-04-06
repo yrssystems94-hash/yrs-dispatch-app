@@ -2,9 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
   <title>YRS Dispatch</title>
   <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/yrs-dispatch-app/manifest.webmanifest" />
+  <meta name="theme-color" content="#495b65" />
+  <link rel="apple-touch-icon" href="/yrs-dispatch-app/icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="YRS Dispatch" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="YRS Dispatch" />
 
   <style>
     :root {
@@ -28,11 +41,23 @@
 
     * { box-sizing: border-box; }
 
-    body {
+    html, body {
+      height: 100%;
       margin: 0;
+    }
+
+    body {
       font-family: Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .app {
@@ -647,5 +672,20 @@
 
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAvtDA7oRz166OUGNFYI9qgIyoSnqcU_bU&libraries=places"></script>
   <script src="./dispatch.js"></script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("/yrs-dispatch-app/sw.js")
+          .then((registration) => {
+            console.log("Service worker registered:", registration.scope);
+          })
+          .catch((error) => {
+            console.error("Service worker registration failed:", error);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
